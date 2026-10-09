@@ -1,0 +1,11 @@
+*
+!requirements.lock.txt
+!summora/
+!summora/**
+!resources/
+!resources/**
+!web/
+!web/**
+!Dockerfile
+**/__pycache__/
+**/*.pyc

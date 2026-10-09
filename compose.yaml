@@ -1,0 +1,45 @@
+services:
+  api:
+    image: summora:${STUDIO_VERSION:-beta1}
+    build: .
+    env_file: .env.deploy
+    environment:
+      STUDIO_MODE: online
+      STUDIO_DATA_DIR: /data
+    volumes: [studio-data:/data]
+    restart: unless-stopped
+    mem_limit: 768m
+    cpus: 1.0
+    healthcheck:
+      test: [CMD, python, -c, "import os,urllib.request; r=urllib.request.Request('http://127.0.0.1:8000/health',headers={'Host':os.environ['STUDIO_ORIGIN'].split('//')[1]}); urllib.request.urlopen(r,timeout=5)"]
+      interval: 30s
+      timeout: 8s
+      retries: 3
+  worker:
+    image: summora:${STUDIO_VERSION:-beta1}
+    command: [python, -m, summora.worker]
+    env_file: .env.deploy
+    environment:
+      STUDIO_MODE: online
+      STUDIO_DATA_DIR: /data
+    volumes: [studio-data:/data]
+    restart: unless-stopped
+    stop_grace_period: 150s
+    mem_limit: 768m
+    cpus: 1.0
+    depends_on: [api]
+  proxy:
+    image: caddy:2.10.2-alpine
+    environment:
+      STUDIO_DOMAIN: ${STUDIO_DOMAIN:?Set STUDIO_DOMAIN in .env.deploy}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+    depends_on: [api]
+volumes:
+  studio-data:
+  caddy-data:
+  caddy-config:

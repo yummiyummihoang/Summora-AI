@@ -1,0 +1,1 @@
+"""Summora text summarization application."""

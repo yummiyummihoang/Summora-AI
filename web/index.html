@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta
+      name="description"
+      content="Summora — nền tảng tóm tắt văn bản bằng AI. Dán nội dung, nạp nhiều tài liệu, chọn model và độ dài."
+    />
+    <title>Summora · Tóm tắt văn bản bằng AI</title>
+    <link rel="icon" href="/favicon.ico?v=summora-1" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=summora-1" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=summora-1" />
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js?v=progress-3" type="module"></script>
+  </head>
+  <body>
+    <dialog id="delete-selection-dialog" aria-labelledby="delete-selection-heading">
+      <div class="dialog-heading">
+        <h2 id="delete-selection-heading">Xóa tài liệu đã chọn</h2>
+        <button type="button" class="icon-button close-dialog" aria-label="Đóng xác nhận xóa">
+          ×
+        </button>
+      </div>
+      <div class="dialog-content"><p id="delete-selection-message"></p></div>
+      <div class="dialog-footer">
+        <button type="button" class="secondary close-dialog">Hủy</button
+        ><button id="confirm-delete-selection" type="button" class="primary">Xóa tài liệu</button>
+      </div>
+    </dialog>
+    <a class="skip" href="#source-text">Đến nội dung nguồn</a>
+    <header class="app-header">
+      <a href="/" class="brand" aria-label="Summora trang chủ"
+        ><span class="brand-logo"
+          ><img
+            src="/summora-logo.png"
+            alt="Summora — Nền tảng tóm tắt văn bản bằng AI"
+            width="5115"
+            height="1468" /></span
+      ></a>
+      <nav aria-label="Điều hướng chính">
+        <button id="nav-work" class="nav active" aria-current="page">Tóm tắt</button
+        ><button id="nav-history" class="nav">Lịch sử</button
+        ><button id="nav-library" class="nav">Thư viện prompt</button>
+      </nav>
+      <button id="account" class="account">Trên máy này</button>
+    </header>
+    <main aria-label="Không gian tóm tắt">
+      <div class="workspace-status">
+        <span id="save-status" class="save-status" role="status">Đang mở không gian…</span>
+      </div>
+      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+      <section id="work-page">
+        <section class="settings-bar" aria-label="Cấu hình tóm tắt chung">
+          <div class="setting model-setting">
+            <label for="model">Mô hình tóm tắt</label
+            ><select id="model">
+              <option value="">Đang nạp…</option>
+            </select>
+          </div>
+          <div class="setting">
+            <label for="style-prompt">Cách tóm tắt</label
+            ><select id="style-prompt"></select>
+          </div>
+          <div class="setting length-setting">
+            <label for="length-mode">Độ dài</label>
+            <div class="joined">
+              <select id="length-mode">
+                <option value="percent">% nguồn</option>
+                <option value="words">Số từ</option>
+                <option value="auto">Tự động</option></select
+              ><input
+                id="length-value"
+                type="number"
+                value="20"
+                min="1"
+                max="100"
+                aria-label="Giá trị độ dài"
+              />
+            </div>
+          </div>
+          <button id="advanced" class="secondary">Tùy chọn nâng cao</button>
+        </section>
+        <p id="config-note" class="config-note">20% nghĩa là giữ lại khoảng 20% số từ nguồn.</p>
+        <section class="reading-workspace">
+          <aside id="document-rail" class="document-rail">
+            <div class="rail-heading">
+              <h2>Tài liệu <span id="doc-count">1</span></h2>
+              <button id="close-rail" class="icon-button mobile-only" aria-label="Đóng danh sách">
+                ×
+              </button>
+            </div>
+            <button id="add-document" class="secondary full">+ Văn bản mới</button>
+            <button
+              id="drop-zone"
+              class="drop-zone"
+              type="button"
+              aria-label="Nạp hoặc kéo thả tài liệu"
+              title="Bấm để tải lên hoặc kéo thả file TXT, DOCX, PDF, JSON, CSV (tối đa 24 MB/file)"
+            >
+              <div class="drop-zone-main">
+                <svg
+                  class="drop-icon"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                <strong>Nạp / Kéo thả tài liệu</strong>
+              </div>
+              <span class="drop-sub">Bấm hoặc kéo thả file (≤ 24MB)</span>
+            </button>
+            <input
+              id="data-file"
+              class="visually-hidden"
+              type="file"
+              multiple
+              accept=".txt,.docx,.pdf,.json,.csv"
+              aria-label="Chọn file tài liệu"
+            />
+            <div class="rail-actions">
+              <label class="check rail-select-all"
+                ><input
+                  id="rail-select-all"
+                  type="checkbox"
+                  aria-label="Chọn tất cả tài liệu"
+                />Chọn tất cả</label
+              ><button
+                id="delete-selected"
+                class="text-button danger"
+                type="button"
+                aria-label="Xóa đã chọn"
+                title="Xóa tài liệu đã chọn"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6" />
+                </svg>
+                Xóa
+              </button>
+            </div>
+            <div id="document-list" class="document-list"></div>
+            <div id="rail-resizer" class="rail-resizer" role="separator" aria-orientation="vertical" aria-label="Kéo để thay đổi kích thước danh sách tài liệu" tabindex="0"></div>
+          </aside>
+          <div class="reading-area">
+            <div class="mobile-switch">
+              <button id="open-rail" class="secondary">Tài liệu</button>
+              <div role="tablist" aria-label="Chế độ đọc">
+                <button id="tab-source" role="tab" aria-selected="true">Nguồn</button
+                ><button id="tab-result" role="tab" aria-selected="false">Kết quả</button>
+              </div>
+            </div>
+            <section class="source-pane" aria-labelledby="source-heading">
+              <div class="pane-heading">
+                <div>
+                  <span class="section-number">01</span>
+                  <h2 id="source-heading">Văn bản nguồn</h2>
+                </div>
+                <span id="revision" class="subtle">v1</span>
+              </div>
+              <label class="visually-hidden" for="source-title">Tiêu đề tài liệu</label
+              ><input id="source-title" class="source-title" value="Văn bản mới" maxlength="200" />
+              <div class="source-meta">
+                <span id="source-count">0 từ</span><span id="source-origin">Nhập tay</span>
+              </div>
+              <label class="visually-hidden" for="source-text">Nội dung văn bản nguồn</label
+              ><textarea
+                id="source-text"
+                class="source-text"
+                placeholder="Dán hoặc nhập văn bản cần tóm tắt tại đây…&#10;&#10;Bạn cũng có thể nạp một hay nhiều tài liệu từ danh sách bên trái."
+                spellcheck="false"
+              ></textarea>
+              <div class="source-bottom">
+                <button id="doc-options" class="text-button">Tùy chọn tài liệu</button
+                ><span id="override-badge" class="badge" hidden></span
+                ><button id="delete-document" class="text-button danger">Xóa</button>
+              </div>
+              <div class="source-run">
+                <div>
+                  <span id="target-info">Mục tiêu: —</span
+                  ><small id="task-info">1 prompt · cấu hình chung</small>
+                  <small id="batch-count"></small>
+                </div>
+                <div class="source-run-actions">
+                  <button id="run-document" class="primary">
+                    Tóm tắt tài liệu này <span aria-hidden="true">→</span>
+                  </button>
+                  <button id="run-batch" class="secondary">Tóm tắt đã chọn</button>
+                </div>
+              </div>
+            </section>
+            <div id="pane-resizer" class="pane-resizer" role="separator" aria-orientation="vertical" aria-label="Kéo để thay đổi kích thước giữa văn bản nguồn và bản tóm tắt" tabindex="0"></div>
+            <section class="result-pane" aria-labelledby="result-heading">
+              <div class="pane-heading">
+                <div>
+                  <span class="section-number">02</span>
+                  <h2 id="result-heading">Bản tóm tắt</h2>
+                </div>
+                <span id="result-badge" class="badge">Chưa có kết quả</span>
+              </div>
+              <div id="result-controls" class="result-controls" hidden>
+                <label class="visually-hidden" for="result-version">Chọn phiên bản kết quả</label
+                ><select id="result-version"></select
+                ><button id="copy-result" class="secondary">Sao chép</button>
+                <details class="export-menu">
+                  <summary class="secondary">Tải xuống</summary>
+                  <div>
+                    <button id="export-txt">Bản tóm tắt .txt</button
+                    ><a id="export-json">Cả lượt chạy .json</a>
+                  </div>
+                </details>
+              </div>
+              <div id="result-body" class="result-body"></div>
+              <div id="result-meta" class="result-meta"></div>
+              <button id="retry-result" class="secondary retry" hidden>
+                Thử lại cấu hình kết quả này
+              </button>
+              <p class="result-footnote">
+                Đối chiếu với nguồn trước khi sử dụng các dữ kiện quan trọng.
+              </p>
+            </section>
+          </div>
+        </section>
+        <section id="job-progress" class="job-progress" aria-live="polite" hidden>
+          <div><strong id="job-status"></strong><span id="progress-text"></span></div>
+          <progress id="progress" max="1" value="0"></progress
+          ><button id="cancel-job" class="secondary">Dừng lượt chạy</button>
+        </section>
+        <button id="retry-submit" class="secondary" hidden>
+          Gửi lại yêu cầu chưa nhận được phản hồi
+        </button>
+        <footer>
+          <span id="privacy-note">API key chỉ được lưu ở server.</span
+          ><span>Ctrl + Enter để tóm tắt tài liệu đang mở</span>
+        </footer>
+      </section>
+      <section id="history-page" class="content-page" hidden>
+        <div class="section-header">
+          <div>
+            <h2>Lịch sử tóm tắt</h2>
+            <p>Nguồn, cấu hình và kết quả được giữ theo từng lượt chạy.</p>
+          </div>
+        </div>
+        <div class="history-filters">
+          <label for="history-search"
+            >Tìm tài liệu<input
+              id="history-search"
+              type="search"
+              placeholder="Nhập tiêu đề…" /></label
+          ><label for="history-status"
+            >Trạng thái<select id="history-status">
+              <option value="">Tất cả</option>
+              <option value="completed">Hoàn thành</option>
+              <option value="completed_with_errors">Có lỗi</option>
+              <option value="interrupted">Gián đoạn</option>
+              <option value="cancelled">Đã dừng</option>
+            </select></label
+          ><button id="refresh-history" class="secondary">Làm mới</button>
+        </div>
+        <div id="history-list"></div>
+      </section>
+      <section id="library-page" class="content-page" hidden>
+        <div class="section-header">
+          <div>
+            <h2>Thư viện prompt</h2>
+            <p>Chọn cách đọc phù hợp. Bạn có thể sửa, nhập tay hoặc nạp prompt của mình.</p>
+          </div>
+          <button id="edit-prompts" class="primary">Soạn prompt riêng</button>
+        </div>
+        <div id="library-list" class="library-grid"></div>
+      </section>
+    </main>
+    <dialog id="settings-dialog" aria-labelledby="settings-heading">
+      <form id="settings-form">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow" id="settings-scope">CẤU HÌNH CHUNG</p>
+            <h2 id="settings-heading">Tùy chọn nâng cao</h2>
+          </div>
+          <button type="button" class="icon-button close-dialog" aria-label="Đóng tùy chọn">
+            ×
+          </button>
+        </div>
+        <p id="inherit-note" class="help" hidden>
+          Bật riêng từng nhóm cần đổi. Các nhóm còn lại tiếp tục dùng cấu hình chung.
+        </p>
+        <div class="dialog-content">
+          <section class="option-group" data-group="model">
+            <div class="group-title">
+              <h3>Mô hình</h3>
+              <label class="check group-toggle" hidden
+                ><input type="checkbox" data-toggle="model" />Cấu hình riêng</label
+              >
+            </div>
+            <div data-fields="model">
+              <label for="advanced-model">Nhà cung cấp / model</label
+              ><select id="advanced-model"></select
+              ><button type="button" id="refresh-config" class="text-button">
+                Nạp lại model từ cấu hình server
+              </button>
+            </div>
+          </section>
+          <section class="option-group" data-group="prompts">
+            <div class="group-title">
+              <h3>Bộ prompt</h3>
+              <label class="check group-toggle" hidden
+                ><input type="checkbox" data-toggle="prompts" />Cấu hình riêng</label
+              >
+            </div>
+            <div data-fields="prompts">
+              <label for="prompt-set">Nạp bộ prompt</label>
+              <div class="joined">
+                <select id="prompt-set"></select
+                ><button type="button" id="load-prompt-set" class="secondary">Nạp</button>
+              </div>
+              <div class="prompt-toolbar">
+                <button type="button" id="add-prompt" class="text-button">+ Nhập prompt</button
+                ><button type="button" id="upload-prompt" class="text-button">
+                  Nạp TXT / JSON / CSV</button
+                ><input
+                  id="prompt-file"
+                  type="file"
+                  accept=".txt,.json,.csv"
+                  class="visually-hidden"
+                  aria-label="Chọn file prompt"
+                />
+              </div>
+              <div id="prompt-editor-list"></div>
+              <p class="help">
+                Chạy các prompt được tick. Biến: {document}, {VAN_BAN_NGUON}, {target_words},
+                {compression_percent}, {N}.
+              </p>
+              <label for="advanced-n">N — số vòng tinh chỉnh</label
+              ><select id="advanced-n">
+                <option value="1">1</option>
+                <option value="3">3</option>
+                <option value="5">5</option></select
+              ><button id="save-prompt-library" type="button" class="text-button">
+                Lưu các prompt đã chọn vào thư viện riêng
+              </button>
+            </div>
+          </section>
+          <section class="option-group" data-group="length">
+            <div class="group-title">
+              <h3>Độ dài</h3>
+              <label class="check group-toggle" hidden
+                ><input type="checkbox" data-toggle="length" />Cấu hình riêng</label
+              >
+            </div>
+            <div data-fields="length">
+              <div class="two-fields">
+                <label for="advanced-length-mode"
+                  >Loại độ dài<select id="advanced-length-mode">
+                    <option value="percent">% độ dài nguồn</option>
+                    <option value="words">Số từ mục tiêu</option>
+                    <option value="auto">Tự động / theo prompt</option>
+                  </select></label
+                ><label for="advanced-length-value"
+                  >Giá trị<input id="advanced-length-value" type="number" min="1" value="20"
+                /></label>
+              </div>
+              <div class="preset-row">
+                <button type="button" data-percent="10">10%</button
+                ><button type="button" data-percent="20">20%</button
+                ><button type="button" data-percent="30">30%</button
+                ><button type="button" data-percent="50">50%</button>
+              </div>
+              <p class="help">
+                20% = còn khoảng 20% số từ nguồn. Cho phép sai lệch ±10% quanh mục tiêu. Từ được
+                tính theo khoảng trắng; “nghiên cứu” tính là 2 từ.
+              </p>
+            </div>
+          </section>
+          <section class="option-group" data-group="format">
+            <div class="group-title">
+              <h3>Định dạng</h3>
+              <label class="check group-toggle" hidden
+                ><input type="checkbox" data-toggle="format" />Cấu hình riêng</label
+              >
+            </div>
+            <div data-fields="format">
+              <label for="advanced-format">Trình bày kết quả</label
+              ><select id="advanced-format">
+                <option value="paragraph">Đoạn văn</option>
+                <option value="bullets">Gạch đầu dòng</option>
+              </select>
+            </div>
+          </section>
+          <details>
+            <summary>Nhập JSON / CSV</summary>
+            <label for="document-field">Trường chứa văn bản</label
+            ><input id="document-field" value="document" />
+            <p class="help">Mỗi bản ghi được thêm thành một tài liệu riêng.</p>
+          </details>
+        </div>
+        <div id="settings-error" class="notice error" role="alert" hidden></div>
+        <div class="dialog-footer">
+          <button type="button" id="reset-overrides" class="text-button" hidden>
+            Dùng lại cấu hình chung</button
+          ><button type="button" class="secondary close-dialog">Hủy</button
+          ><button type="submit" class="primary">Áp dụng</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="account-dialog" aria-labelledby="account-heading">
+      <form id="login-form">
+        <div class="dialog-heading">
+          <h2 id="account-heading">Tài khoản</h2>
+          <button type="button" class="icon-button close-dialog" aria-label="Đóng tài khoản">
+            ×
+          </button>
+        </div>
+        <div class="dialog-content">
+          <p id="account-info"></p>
+          <div id="login-fields">
+            <label for="login-email"
+              >Email<input id="login-email" type="email" autocomplete="username" required /></label
+            ><label for="login-password"
+              >Mật khẩu<input
+                id="login-password"
+                type="password"
+                autocomplete="current-password"
+                required
+                minlength="12"
+                maxlength="256"
+            /></label>
+            <p class="help">Bản beta dành cho tài khoản được quản trị viên cấp.</p>
+          </div>
+          <div id="account-error" class="notice error" role="alert" hidden></div>
+          <button id="login-button" type="submit" class="primary full">Đăng nhập</button
+          ><button id="logout" type="button" class="secondary full" hidden>Đăng xuất</button>
+        </div>
+      </form>
+    </dialog>
+  </body>
+</html>
