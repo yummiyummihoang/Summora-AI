@@ -1,5 +1,7 @@
 .venv/
 .ruff_cache/
 node_modules/
+pnpm-lock.yaml
+**/.next/
+**/out/
 studio_data/
-resources/

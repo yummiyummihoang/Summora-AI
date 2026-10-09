@@ -68,9 +68,15 @@ Caddy nhận HTTPS và gửi tới Next.js. Next.js proxy `/api/*` nội bộ t�
 ## Kiểm tra
 
 ```powershell
-pnpm --filter @summora/web build
-python -m compileall services/api/summora
-$env:PYTHONPATH = "services/api"; python -m unittest tests.test_tasks tests.test_auth -v
+pnpm format:check
+pnpm lint
+pnpm db:generate
+pnpm build
+$env:PYTHONPATH = "services/api"
+.\.venv\Scripts\python.exe -m compileall -q services/api/summora tests
+.\.venv\Scripts\ruff.exe check services/api tests
+.\.venv\Scripts\ruff.exe format --check services/api tests
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
 Luồng tích hợp cần Supabase project và provider key: đăng ký/xác nhận email, job mẫu, quota, hủy job, worker restart, ownership giữa hai tài khoản và tải JSON. Không cần provider thật để chạy unit tests hiện có.

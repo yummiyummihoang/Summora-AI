@@ -9,10 +9,10 @@ datasource db {
 }
 
 model Profile {
-  userId     String @id @map("user_id") @db.Uuid
+  userId     String  @id @map("user_id") @db.Uuid
   email      String?
-  role       String @default("member")
-  dailyQuota Int    @default(200) @map("daily_quota")
+  role       String  @default("member")
+  dailyQuota Int     @default(200) @map("daily_quota")
 
   @@map("profiles")
 }

@@ -11,11 +11,17 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  if (!hasSameOrigin(request)) return NextResponse.json({ error: "Nguồn yêu cầu không hợp lệ." }, { status: 403 });
+  if (!hasSameOrigin(request))
+    return NextResponse.json({ error: "Nguồn yêu cầu không hợp lệ." }, { status: 403 });
   const user = await getAuthenticatedUser();
   if (!user) return NextResponse.json({ error: "Đăng nhập để lưu bản nháp." }, { status: 401 });
   const value = await request.json();
-  if (!value || typeof value !== "object" || !Array.isArray(value.documents) || value.documents.length > 1000) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !Array.isArray(value.documents) ||
+    value.documents.length > 1000
+  ) {
     return NextResponse.json({ error: "Bản nháp nhận tối đa 1.000 tài liệu." }, { status: 400 });
   }
   const body = value as Prisma.InputJsonValue;

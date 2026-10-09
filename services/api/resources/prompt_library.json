@@ -4,17 +4,32 @@
       "id": "basic",
       "name": "Tóm tắt cơ bản",
       "prompts": [
-        {"name": "Trung tính", "text": "Tóm tắt văn bản bằng tiếng Việt, trung tính và mạch lạc. Giữ ý chính, dữ kiện, điều kiện và mức độ chắc chắn của nguồn. Không thêm thông tin ngoài nguồn. Chỉ trả bản tóm tắt.\n\n{document}"},
-        {"name": "Dữ kiện chính", "text": "Tóm tắt bằng tiếng Việt, ưu tiên sự kiện, chủ thể, số liệu, thời gian, nguyên nhân và kết quả quan trọng. Giữ chính xác phủ định và điều kiện. Không suy đoán hoặc thêm kiến thức ngoài văn bản.\n\n{document}"},
-        {"name": "Ý chính dễ đọc", "text": "Tóm tắt văn bản bằng tiếng Việt để người chưa đọc nguồn hiểu chủ đề và các ý quan trọng. Loại bỏ lặp lại, giữ quan hệ giữa các ý và không thêm thông tin ngoài nguồn.\n\n{document}"}
+        {
+          "name": "Trung tính",
+          "text": "Tóm tắt văn bản bằng tiếng Việt, trung tính và mạch lạc. Giữ ý chính, dữ kiện, điều kiện và mức độ chắc chắn của nguồn. Không thêm thông tin ngoài nguồn. Chỉ trả bản tóm tắt.\n\n{document}"
+        },
+        {
+          "name": "Dữ kiện chính",
+          "text": "Tóm tắt bằng tiếng Việt, ưu tiên sự kiện, chủ thể, số liệu, thời gian, nguyên nhân và kết quả quan trọng. Giữ chính xác phủ định và điều kiện. Không suy đoán hoặc thêm kiến thức ngoài văn bản.\n\n{document}"
+        },
+        {
+          "name": "Ý chính dễ đọc",
+          "text": "Tóm tắt văn bản bằng tiếng Việt để người chưa đọc nguồn hiểu chủ đề và các ý quan trọng. Loại bỏ lặp lại, giữ quan hệ giữa các ý và không thêm thông tin ngoài nguồn.\n\n{document}"
+        }
       ]
     },
     {
       "id": "research",
       "name": "Nghiên cứu & kiểm chứng",
       "prompts": [
-        {"name": "Bảo toàn dữ kiện", "text": "Tóm tắt văn bản bằng tiếng Việt. Giữ đúng chủ thể, số liệu, thời gian, quan hệ nhân quả, phủ định, điều kiện và mức độ chắc chắn. Phân biệt kết quả đã có với dự kiến hoặc nhận định. Loại bỏ lặp lại và chi tiết phụ; không thêm kiến thức ngoài nguồn. Chỉ xuất bản tóm tắt.\n\n{VAN_BAN_NGUON}"},
-        {"name": "Tinh chỉnh N vòng", "text": "Tóm tắt nguồn bằng tiếng Việt, sau đó tinh chỉnh {N} vòng: đối chiếu với nguồn, sửa khẳng định không có căn cứ, bổ sung ý chính còn thiếu và loại bỏ lặp lại. Giữ chính xác dữ kiện, điều kiện và mức độ chắc chắn. Chỉ xuất bản tóm tắt cuối cùng, không xuất bản nháp hoặc quá trình suy luận.\n\n{document}"}
+        {
+          "name": "Bảo toàn dữ kiện",
+          "text": "Tóm tắt văn bản bằng tiếng Việt. Giữ đúng chủ thể, số liệu, thời gian, quan hệ nhân quả, phủ định, điều kiện và mức độ chắc chắn. Phân biệt kết quả đã có với dự kiến hoặc nhận định. Loại bỏ lặp lại và chi tiết phụ; không thêm kiến thức ngoài nguồn. Chỉ xuất bản tóm tắt.\n\n{VAN_BAN_NGUON}"
+        },
+        {
+          "name": "Tinh chỉnh N vòng",
+          "text": "Tóm tắt nguồn bằng tiếng Việt, sau đó tinh chỉnh {N} vòng: đối chiếu với nguồn, sửa khẳng định không có căn cứ, bổ sung ý chính còn thiếu và loại bỏ lặp lại. Giữ chính xác dữ kiện, điều kiện và mức độ chắc chắn. Chỉ xuất bản tóm tắt cuối cùng, không xuất bản nháp hoặc quá trình suy luận.\n\n{document}"
+        }
       ]
     }
   ]

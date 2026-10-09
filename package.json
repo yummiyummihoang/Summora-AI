@@ -6,11 +6,14 @@
     "dev": "pnpm --filter @summora/web dev",
     "build": "pnpm --filter @summora/web build",
     "lint": "pnpm --filter @summora/web lint",
+    "format": "prettier --write \"apps/web/**/*.{ts,tsx,js,mjs,json,css}\" \"services/api/resources/*.json\" \"README.md\" \"docs/**/*.md\" \"*.{json,yaml,yml}\"",
+    "format:check": "prettier --check \"apps/web/**/*.{ts,tsx,js,mjs,json,css}\" \"services/api/resources/*.json\" \"README.md\" \"docs/**/*.md\" \"*.{json,yaml,yml}\"",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:dev": "prisma migrate dev"
   },
   "devDependencies": {
+    "prettier": "^3.9.9",
     "prisma": "^6.19.0"
   },
   "dependencies": {
