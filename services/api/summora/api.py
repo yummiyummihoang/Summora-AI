@@ -3,6 +3,7 @@
 import json
 import os
 import threading
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
@@ -293,6 +294,8 @@ def create_app(
             heartbeat = store.health()
         except Exception:
             raise HTTPException(503, "Không kết nối được Supabase PostgreSQL.") from None
-        return {"status": "ok", "worker_seen": bool(heartbeat), "worker_last_seen": heartbeat}
+        max_age = int(os.environ.get("STUDIO_WORKER_HEARTBEAT_MAX_AGE", "300"))
+        worker_seen = heartbeat is not None and time.time() - float(heartbeat) <= max_age
+        return {"status": "ok", "worker_seen": worker_seen, "worker_last_seen": heartbeat}
 
     return app

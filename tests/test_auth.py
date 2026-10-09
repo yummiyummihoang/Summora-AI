@@ -43,6 +43,23 @@ class SupabaseAuthTests(unittest.TestCase):
                 self.assertEqual(client.get("/api/draft").status_code, 401)
                 self.assertEqual(client.post("/api/jobs", json={}).status_code, 401)
 
+    def test_health_only_reports_recent_worker_heartbeat(self):
+        env = {
+            "DATABASE_URL": "postgresql://user:password@127.0.0.1:5432/summora",
+            "SUPABASE_URL": "https://project.example",
+        }
+        with patch.dict(os.environ, env):
+            app = create_app(embedded_worker=False)
+            with TestClient(app) as client:
+                app.state.store.health = lambda: time.time() - 301
+                stale = client.get("/health").json()
+                self.assertEqual(stale["status"], "ok")
+                self.assertFalse(stale["worker_seen"])
+
+                app.state.store.health = lambda: time.time()
+                recent = client.get("/health").json()
+                self.assertTrue(recent["worker_seen"])
+
 
 if __name__ == "__main__":
     unittest.main()
