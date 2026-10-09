@@ -1,74 +1,76 @@
-# Summora
+# Summora AI
 
-Web tóm tắt văn bản bằng AI: nhập hoặc kéo thả nhiều tài liệu, chọn model/prompt,
-đặt độ dài theo phần trăm hoặc số từ, xem kết quả cạnh nguồn và lưu lịch sử.
+Summora là không gian tóm tắt tài liệu bằng AI. Ứng dụng gồm giao diện Next.js, Supabase Auth/PostgreSQL và API/worker Python FastAPI. Các luồng chính gồm nhập TXT/DOCX/PDF/JSON/CSV, cấu hình model và prompt, xử lý job có hàng đợi, xem lịch sử, lưu bản nháp và tải kết quả JSON.
 
-## Khởi động
+## Công nghệ
 
-Yêu cầu Python 3.10 trở lên. Trên Windows, mở `start_web.cmd`.
-Launcher tạo `.venv`, cài đúng phiên bản trong `requirements.lock.txt` và mở
-<http://127.0.0.1:8765>. Giữ cửa sổ terminal mở khi sử dụng.
+- `apps/web`: Next.js App Router, pnpm, Tailwind CSS và các component theo shadcn/ui.
+- Supabase: đăng ký/đăng nhập email và PostgreSQL.
+- Prisma: schema/migration và các thao tác hồ sơ, bản nháp, thư viện prompt trong Next.js.
+- `services/api/summora/`: FastAPI xác minh Supabase JWT, nhập tài liệu và quản lý API job.
+- `services/api/summora.worker`: worker Python gọi provider; SQLAlchemy kết nối cùng Supabase PostgreSQL.
 
-Chạy tại thư mục dự án với cổng riêng:
+## Cấu hình local
+
+1. Tạo Supabase project và bật email/password trong Authentication. Dùng URL project, publishable/anon key và connection string PostgreSQL từ Project Settings.
+2. Sao chép `.env.example` thành `.env` ở repo root cho FastAPI/worker và Prisma CLI. Sao chép `apps/web/.env.local.example` thành `apps/web/.env.local` cho Next.js; điền Supabase URL/key cùng database URLs ở cả hai file. Dùng PostgreSQL connection trực tiếp hoặc session pooler; worker cần giữ một PostgreSQL session để khóa advisory hoạt động.
+3. Cài Python 3.10+, Node.js 20.9+ và pnpm 10+.
 
 ```powershell
-.\.venv\Scripts\python.exe -m summora --port 52635
+pnpm install
+pnpm db:generate
+pnpm db:migrate
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.lock.txt
 ```
 
-Nếu cài thủ công: tạo môi trường Python, chạy `pip install -r requirements.lock.txt`,
-copy `.env.example` thành `.env`, rồi chạy `python -m summora`.
-Điền API key và model vào `.env`; không đưa file này vào Git.
+Mở ba terminal tại thư mục repo:
 
-## Cấu trúc
-
-```text
-summora/             Backend Python
-  api.py             FastAPI, phiên làm việc và các route
-  config.py          Cấu hình nhà cung cấp
-  paths.py           Đường dẫn dữ liệu và tài nguyên
-  providers.py       Kết nối API mô hình
-  formats.py         Đọc CSV/JSON, kiểm tra prompt, ghi JSON
-  documents.py       Nhập TXT, DOCX, PDF, JSON, CSV
-  tasks.py           Chuẩn hóa tác vụ và xử lý tóm tắt
-  storage.py         SQLite, tài khoản, hạn mức và hàng đợi
-  worker.py          Worker xử lý hàng đợi
-  cli/               Quản lý tài khoản, backup và đóng gói
-web/                 HTML, CSS, JavaScript và logo
-resources/           Thư viện prompt mặc định
-tests/               Kiểm thử và server preview với model giả
-deploy/              Cấu hình reverse proxy Caddy
-docs/                Hướng dẫn triển khai và vận hành
-studio_data/         Database và kết quả riêng tư, không đưa vào Git
+```powershell
+pnpm dev
 ```
 
-`Dockerfile` và `compose.yaml` nằm ở gốc để build/deploy trực tiếp.
-Backend dùng FastAPI/Uvicorn và SQLite; frontend dùng JavaScript modules.
+```powershell
+$env:PYTHONPATH = "services/api"; .\.venv\Scripts\python.exe -m uvicorn summora.api:create_app --factory --app-dir services/api --host 127.0.0.1 --port 8000
+```
+
+```powershell
+$env:PYTHONPATH = "services/api"; .\.venv\Scripts\python.exe -m summora.worker
+```
+
+Truy cập <http://localhost:3000>. Khi bật email confirmation, người đăng ký cần xác nhận email trước khi đăng nhập. Trong local, có thể tắt confirmation trong Supabase Auth để thử nhanh.
+
+## Biến môi trường
+
+`DATABASE_URL` dùng bởi FastAPI/SQLAlchemy và Prisma runtime. `DIRECT_URL` dùng bởi Prisma migration. Cả hai cần trỏ tới cùng Supabase database. `FASTAPI_INTERNAL_URL` mặc định là `http://localhost:8000` trong Next.js dev. `WEB_ORIGIN` phải khớp origin của trình duyệt. Provider keys và model names chỉ được đọc phía Python, không trả key cho trình duyệt.
+
+Các bảng mới được khai báo trong `prisma/schema.prisma` và migration `prisma/migrations`. Migration tạo profile khi người dùng đăng ký và bật RLS; web/API xác thực quyền sở hữu theo `user_id`. Không đặt Supabase service role key trong biến `NEXT_PUBLIC_*`.
+
+## Docker triển khai
+
+Sao chép `.env.deploy.example` thành `.env.deploy`, cấu hình domain, Supabase connection và provider. Sau đó chạy:
+
+```sh
+docker compose --env-file .env.deploy build
+docker compose --env-file .env.deploy up -d
+```
+
+Caddy nhận HTTPS và gửi tới Next.js. Next.js proxy `/api/*` nội bộ tới FastAPI; worker xử lý job tuần tự. PostgreSQL/Auth được cung cấp bởi Supabase. Chỉ chạy một worker cho cùng database; PostgreSQL advisory lock ngăn một worker thứ hai khởi động.
+
+## Bảo mật và dữ liệu
+
+- Supabase Auth quản lý mật khẩu, phiên và xác minh email.
+- FastAPI xác minh access token bằng Supabase JWKS (JWT HS256 cần `SUPABASE_JWT_SECRET`).
+- File kết quả tạm nằm trong `studio_data/`; xóa job hoặc hết thời hạn lưu sẽ xóa nội dung liên quan.
+- Không có dữ liệu SQLite lịch sử trong repository để nhập. Bản triển khai bắt đầu với Supabase database mới.
+- Bật backup/point-in-time recovery trong Supabase theo gói hosting và lưu API keys ngoài Git.
 
 ## Kiểm tra
 
 ```powershell
-.\.venv\Scripts\python.exe -m unittest discover -s tests -v
-node --check web/app.js
-node --test tests/test_state.mjs
+pnpm --filter @summora/web build
+python -m compileall services/api/summora
+$env:PYTHONPATH = "services/api"; python -m unittest tests.test_tasks tests.test_auth -v
 ```
 
-Các test dùng client giả, không gọi API trả phí. Preview riêng:
-`python -m tests.serve_studio --port 52636`.
-Định dạng và kiểm tra mã Python: `ruff format .` và `ruff check .`
-(cài công cụ phát triển bằng `pip install -r requirements-dev.txt`).
-Định dạng giao diện bằng `npx prettier@3.6.2 --write "web/*.js" "web/*.css" "web/*.html"`.
-
-## Dữ liệu và triển khai
-
-Bản nháp/lịch sử nằm trong `studio_data/studio.sqlite3`; kết quả xuất JSON cùng thư mục.
-Dữ liệu và `.env` được giữ nguyên sau lần dọn cấu trúc. Các backup trước đó nằm tại
-`../summora_backups/`, ngoài mã ứng dụng.
-
-```powershell
-python -m summora.cli.backup backup ../summora_backups/manual.zip
-python -m summora.cli.share
-```
-
-ZIP chia sẻ chỉ chứa mã, tài nguyên, test và cấu hình mẫu; không chứa key hoặc dữ liệu riêng.
-Để chạy online, xem [hướng dẫn triển khai](docs/DEPLOY.md): HTTPS, tài khoản riêng,
-một worker và ổ đĩa bền vững.
+Luồng tích hợp cần Supabase project và provider key: đăng ký/xác nhận email, job mẫu, quota, hủy job, worker restart, ownership giữa hai tài khoản và tải JSON. Không cần provider thật để chạy unit tests hiện có.

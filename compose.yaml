@@ -1,32 +1,52 @@
 services:
   api:
-    image: summora:${STUDIO_VERSION:-beta1}
-    build: .
+    image: summora-api:${STUDIO_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
     env_file: .env.deploy
     environment:
       STUDIO_MODE: online
       STUDIO_DATA_DIR: /data
-    volumes: [studio-data:/data]
+      WEB_ORIGIN: https://${STUDIO_DOMAIN}
+    volumes: [summora-data:/data]
     restart: unless-stopped
     mem_limit: 768m
     cpus: 1.0
     healthcheck:
-      test: [CMD, python, -c, "import os,urllib.request; r=urllib.request.Request('http://127.0.0.1:8000/health',headers={'Host':os.environ['STUDIO_ORIGIN'].split('//')[1]}); urllib.request.urlopen(r,timeout=5)"]
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=5)"]
       interval: 30s
       timeout: 8s
       retries: 3
   worker:
-    image: summora:${STUDIO_VERSION:-beta1}
+    image: summora-api:${STUDIO_VERSION:-latest}
     command: [python, -m, summora.worker]
     env_file: .env.deploy
     environment:
       STUDIO_MODE: online
       STUDIO_DATA_DIR: /data
-    volumes: [studio-data:/data]
+    volumes: [summora-data:/data]
     restart: unless-stopped
     stop_grace_period: 150s
     mem_limit: 768m
     cpus: 1.0
+    depends_on: [api]
+  web:
+    image: summora-web:${STUDIO_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
+    environment:
+      FASTAPI_INTERNAL_URL: http://api:8000
+      NODE_ENV: production
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
+      DATABASE_URL: ${DATABASE_URL}
+      WEB_ORIGIN: https://${STUDIO_DOMAIN}
+    restart: unless-stopped
     depends_on: [api]
   proxy:
     image: caddy:2.10.2-alpine
@@ -38,8 +58,8 @@ services:
       - caddy-data:/data
       - caddy-config:/config
     restart: unless-stopped
-    depends_on: [api]
+    depends_on: [web]
 volumes:
-  studio-data:
+  summora-data:
   caddy-data:
   caddy-config:

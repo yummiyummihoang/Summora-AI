@@ -16,6 +16,7 @@ from summora.tasks import (
     run_tasks,
     word_count,
 )
+
 from tests.helpers import FakeClient, payload, settings
 
 

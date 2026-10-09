@@ -1,0 +1,70 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Profile {
+  userId     String @id @map("user_id") @db.Uuid
+  email      String?
+  role       String @default("member")
+  dailyQuota Int    @default(200) @map("daily_quota")
+
+  @@map("profiles")
+}
+
+model Draft {
+  owner   String @id @db.Uuid
+  body    Json
+  updated Float
+
+  @@map("drafts")
+}
+
+model PromptLibrary {
+  owner String @id @db.Uuid
+  body  Json
+
+  @@map("prompts")
+}
+
+model Job {
+  id       String  @id
+  owner    String  @db.Uuid
+  idem     String
+  digest   String
+  status   String
+  body     Json
+  state    Json
+  created  Float
+  day      String
+  reserved Int     @default(0)
+  charged  Int     @default(0)
+  cancel   Boolean @default(false)
+  deleted  Boolean @default(false)
+
+  @@unique([owner, idem])
+  @@index([status, created])
+  @@index([owner, created])
+  @@index([day])
+  @@map("jobs")
+}
+
+model Worker {
+  id        Int   @id
+  heartbeat Float
+
+  @@map("worker")
+}
+
+model RateLimit {
+  key     String @id
+  count   Int
+  expires Float
+
+  @@map("limits")
+}

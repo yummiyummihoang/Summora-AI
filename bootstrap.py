@@ -1,6 +1,7 @@
-"""Chuẩn bị môi trường riêng rồi mở web; không yêu cầu cài thư viện thủ công."""
+"""Chuẩn bị môi trường Python riêng cho FastAPI."""
 
 import hashlib
+import os
 import shutil
 import subprocess
 import sys
@@ -24,7 +25,11 @@ def prepare():
     stamp = environment / ".requirements.sha256"
     installed = (
         subprocess.run(
-            [str(python), "-c", "import openai, dotenv, docx, pypdf, fastapi, uvicorn, multipart"],
+            [
+                str(python),
+                "-c",
+                "import openai, dotenv, docx, pypdf, fastapi, uvicorn, multipart, sqlalchemy, psycopg, jwt",
+            ],
             cwd=ROOT,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -43,8 +48,23 @@ def prepare():
 if __name__ == "__main__":
     try:
         python = prepare()
-        print("Dang mo giao dien web. Giu cua so nay mo khi su dung.", flush=True)
-        result = subprocess.run([str(python), "-m", "summora", "--open"], cwd=ROOT)
+        print("Dang khoi dong FastAPI tai http://127.0.0.1:8000.", flush=True)
+        environment = {**os.environ, "PYTHONPATH": str(ROOT / "services" / "api")}
+        result = subprocess.run(
+            [
+                str(python),
+                "-m",
+                "uvicorn",
+                "summora.api:create_app",
+                "--factory",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "8000",
+            ],
+            cwd=ROOT / "services" / "api",
+            env=environment,
+        )
         raise SystemExit(result.returncode)
     except KeyboardInterrupt:
         pass
