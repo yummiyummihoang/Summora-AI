@@ -4,6 +4,10 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Summora — Tóm tắt tài liệu bằng AI",
   description: "Không gian tóm tắt tài liệu bằng AI của bạn.",
+  icons: {
+    icon: "/summora-icon.png",
+    apple: "/summora-icon.png",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

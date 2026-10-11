@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import {
   BookOpen,
   Check,
@@ -16,7 +17,9 @@ import {
   LoaderCircle,
   LogOut,
   MessageSquareText,
+  Pencil,
   Plus,
+  RotateCcw,
   Save,
   Search,
   Settings2,
@@ -45,6 +48,7 @@ type Doc = {
   selected?: boolean;
   revision?: number;
   overrides?: Partial<Settings>;
+  settings?: Settings;
 };
 type Prompt = { name: string; text: string };
 type Settings = {
@@ -65,7 +69,16 @@ type Job = {
   errors: number;
   message: string;
   documents: Doc[];
-  tasks: Array<{ id: string; status: string; prompt_name: string }>;
+  tasks: Array<{
+    id: string;
+    status: string;
+    prompt_name: string;
+    document_id: string;
+    provider: string;
+    model: string;
+    prompt_text: string;
+    output_format: Settings["output_format"];
+  }>;
   results: Array<{
     task_id: string;
     document_id: string;
@@ -73,6 +86,11 @@ type Job = {
     prompt_name: string;
     status: string;
     summary?: string;
+    provider?: string;
+    model?: string;
+    prompt_text?: string;
+    output_format?: Settings["output_format"];
+    actual_words?: number;
     error?: string;
     job_id?: string;
   }>;
@@ -163,6 +181,9 @@ function prettyDate(seconds: number) {
     new Date(seconds * 1000),
   );
 }
+function summaryWordCount(summary: string) {
+  return summary.trim() ? summary.trim().split(/\s+/).length : 0;
+}
 
 const ui = {
   authShell: "grid min-h-screen grid-cols-2 bg-background max-md:grid-cols-1",
@@ -191,7 +212,7 @@ const ui = {
   fieldLabel: "flex flex-col gap-2 text-sm font-medium text-foreground",
   muted: "text-muted-foreground",
   notice: "rounded-md border bg-muted p-3 text-sm leading-6 text-foreground",
-  appShell: "mx-auto max-w-screen-2xl px-4 pb-8 md:px-8",
+  appShell: "mx-auto w-full max-w-none px-3 pb-8 sm:px-4",
   topbar: "flex h-14 items-center justify-between gap-2 border-b sm:h-16",
   topBrand:
     "flex items-center gap-3 [&>div:last-child]:flex [&>div:last-child]:flex-col [&>div:last-child]:gap-0.5 [&_strong]:text-sm [&_strong]:font-semibold [&_span]:text-xs [&_span]:text-muted-foreground",
@@ -206,7 +227,7 @@ const ui = {
     "flex max-w-full flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-2 text-xs text-muted-foreground [&_strong]:font-semibold [&_strong]:text-foreground",
   globalNotice:
     "mb-4 flex items-center justify-between gap-3 rounded-md border bg-muted p-3 text-sm text-foreground",
-  workspace: "grid min-w-0 grid-cols-1 items-start gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-12",
+  workspace: "mt-4 grid min-w-0 grid-cols-1 items-start gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-12",
   leftColumn: "flex min-w-0 flex-col gap-3 sm:gap-4 md:col-span-1 xl:col-span-3",
   centerColumn: "flex min-w-0 flex-col gap-3 sm:gap-4 md:col-span-2 xl:col-span-6",
   rightColumn: "flex min-w-0 flex-col gap-3 sm:gap-4 md:col-span-2 xl:col-span-3",
@@ -301,6 +322,9 @@ export function Studio() {
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [field, setField] = useState("document");
   const [privatePrompts, setPrivatePrompts] = useState<Prompt[]>([]);
+  const [editingPrivatePromptIndex, setEditingPrivatePromptIndex] = useState<number | null>(null);
+  const [privatePromptEditDraft, setPrivatePromptEditDraft] = useState<Prompt | null>(null);
+  const [savingPrivatePromptEdit, setSavingPrivatePromptEdit] = useState(false);
   const [promptLibrarySelection, setPromptLibrarySelection] = useState("");
   const [privatePromptPickerOpen, setPrivatePromptPickerOpen] = useState(false);
   const [selectedPrivatePromptIndexes, setSelectedPrivatePromptIndexes] = useState<number[]>([]);
@@ -644,6 +668,52 @@ export function Studio() {
     }
   }
 
+  async function retryResult(result: Job["results"][number]) {
+    if (!job || busy) return;
+    const document = job.documents.find((item) => item.id === result.document_id);
+    const task = job.tasks.find((item) => item.id === result.task_id);
+    const model = result.model || task?.model || document?.settings?.model;
+    const provider = result.provider || task?.provider || document?.settings?.provider;
+    const promptText = result.prompt_text || task?.prompt_text;
+    if (!document || !model || !provider || !promptText) {
+      setError("Không đủ thông tin của lượt cũ để thử lại tác vụ này.");
+      return;
+    }
+    const retryDocument: Doc = {
+      id: document.id,
+      title: document.title,
+      text: document.text,
+      source: document.source,
+      revision: document.revision || 1,
+    };
+    const retrySettings: Settings = {
+      ...(document.settings || settings),
+      provider,
+      model,
+      prompts: [{ name: result.prompt_name || task?.prompt_name || "Prompt", text: promptText }],
+      output_format: result.output_format || task?.output_format || "paragraph",
+    };
+    const payload = { documents: [retryDocument], settings: retrySettings, field: "document" };
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await api("/api/validate", payload);
+      const created = await api<{ id: string }>("/api/jobs", payload, {
+        "Idempotency-Key": crypto.randomUUID(),
+      });
+      const current = await api<Job>(`/api/jobs/${created.id}`);
+      setJob(current);
+      setResultDocId(retryDocument.id);
+      setRightTab("result");
+      await refreshHistory();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không thể thử lại tác vụ.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function openHistory(item: HistoryItem) {
     setRightTab("result");
     setError("");
@@ -681,6 +751,43 @@ export function Studio() {
       setNotice("Đã lưu thư viện prompt riêng.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không lưu được prompt.");
+    }
+  }
+
+  async function savePrivatePromptEdit() {
+    if (editingPrivatePromptIndex === null || !privatePromptEditDraft) return;
+    const name = privatePromptEditDraft.name.trim();
+    const text = privatePromptEditDraft.text.trim();
+    if (!name || !text) {
+      setError("Tên và nội dung prompt không được để trống.");
+      return;
+    }
+    const original = privatePrompts[editingPrivatePromptIndex];
+    const updatedPrompt = { name, text };
+    const updatedPrompts = privatePrompts.map((prompt, index) =>
+      index === editingPrivatePromptIndex ? updatedPrompt : prompt,
+    );
+    setSavingPrivatePromptEdit(true);
+    setError("");
+    try {
+      await api("/api/my-prompts", { prompts: updatedPrompts });
+      setPrivatePrompts(updatedPrompts);
+      setSettings((old) => ({
+        ...old,
+        prompts: old.prompts.map((prompt) =>
+          prompt.name === original?.name && prompt.text === original?.text
+            ? updatedPrompt
+            : prompt,
+        ),
+      }));
+      setEditingPrivatePromptIndex(null);
+      setPrivatePromptEditDraft(null);
+      markChanged();
+      setNotice("Đã cập nhật prompt trong thư viện của bạn.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không lưu được prompt.");
+    } finally {
+      setSavingPrivatePromptEdit(false);
     }
   }
 
@@ -821,15 +928,14 @@ export function Studio() {
   return (
     <main className={ui.appShell}>
       <header className={ui.topbar}>
-        <div className={ui.topBrand}>
-          <div className={cn(ui.brandMark, ui.brandMarkSmall)}>
-            <Sparkles size={17} />
-          </div>
-          <div>
-            <strong>Summora</strong>
-            <span>AI document studio</span>
-          </div>
-        </div>
+        <Image
+          src="/summora-logo.png"
+          alt="Summora — Nền tảng tóm tắt văn bản bằng AI"
+          width={180}
+          height={52}
+          className="h-11 w-auto shrink-0 object-contain"
+          priority
+        />
         <div className={ui.topActions}>
           <span className={ui.saveIndicator}>
             {saved ? <Check size={14} /> : <LoaderCircle size={14} className="animate-spin" />}
@@ -851,20 +957,6 @@ export function Studio() {
           </Button>
         </div>
       </header>
-      <div className={ui.pageHeading}>
-        <div>
-          <p className={ui.eyebrow}>KHÔNG GIAN LÀM VIỆC</p>
-          <h1 className={ui.pageTitle}>Tóm tắt tài liệu</h1>
-          <p className={ui.pageDescription}>
-            Nhập nguồn, chọn cách tóm tắt và theo dõi kết quả ngay tại đây.
-          </p>
-        </div>
-        <div className={ui.quotaChip}>
-          <Sparkles size={15} />
-          <span>Hạn mức mỗi ngày</span>
-          <strong>{profile?.dailyQuota ?? 200} tác vụ</strong>
-        </div>
-      </div>
       {(error || notice) && (
         <div className={ui.globalNotice} role={error ? "alert" : "status"}>
           {error || notice}
@@ -1315,12 +1407,76 @@ export function Studio() {
                           )
                         }
                       />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium">{prompt.name || `Prompt ${index + 1}`}</p>
-                        <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-muted-foreground">
-                          {prompt.text}
-                        </p>
-                      </div>
+                      {editingPrivatePromptIndex === index && privatePromptEditDraft ? (
+                        <div className="min-w-0 flex-1 space-y-2">
+                          <Input
+                            aria-label={`Sửa tên prompt ${index + 1}`}
+                            value={privatePromptEditDraft.name}
+                            onChange={(event) =>
+                              setPrivatePromptEditDraft((old) =>
+                                old ? { ...old, name: event.target.value } : old,
+                              )
+                            }
+                          />
+                          <Textarea
+                            aria-label={`Sửa nội dung prompt ${index + 1}`}
+                            className="min-h-40"
+                            maxLength={10_000}
+                            value={privatePromptEditDraft.text}
+                            onChange={(event) =>
+                              setPrivatePromptEditDraft((old) =>
+                                old ? { ...old, text: event.target.value } : old,
+                              )
+                            }
+                          />
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              disabled={savingPrivatePromptEdit}
+                              onClick={() => void savePrivatePromptEdit()}
+                            >
+                              <Save size={13} />
+                              {savingPrivatePromptEdit ? "Đang lưu…" : "Lưu prompt"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={savingPrivatePromptEdit}
+                              onClick={() => {
+                                setEditingPrivatePromptIndex(null);
+                                setPrivatePromptEditDraft(null);
+                              }}
+                            >
+                              Hủy
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium">
+                              {prompt.name || `Prompt ${index + 1}`}
+                            </p>
+                            <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-muted-foreground">
+                              {prompt.text}
+                            </p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 shrink-0"
+                            aria-label={`Sửa prompt ${prompt.name}`}
+                            title="Sửa prompt"
+                            onClick={() => {
+                              setEditingPrivatePromptIndex(index);
+                              setPrivatePromptEditDraft({ ...prompt });
+                            }}
+                          >
+                            <Pencil size={14} />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   ))}
                   <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
@@ -1760,6 +1916,32 @@ export function Studio() {
                             ) : (
                               <p className={ui.muted}>{result.error || "Đang chờ kết quả…"}</p>
                             )}
+                            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-2 text-xs text-muted-foreground">
+                              <div className="min-w-0 flex-1">
+                                <p
+                                  className="truncate"
+                                  title={`${providers[result.provider || ""]?.label || result.provider || "Model"} · ${result.model || "Không rõ model"}`}
+                                >
+                                  Mô hình: {providers[result.provider || ""]?.label || result.provider || "Không rõ"} · {result.model || "Không rõ"}
+                                </p>
+                                {result.summary && (
+                                  <p className="mt-1">
+                                    {summaryWordCount(result.summary).toLocaleString("vi-VN")} từ
+                                  </p>
+                                )}
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                disabled={
+                                  busy ||
+                                  ["queued", "running", "cancelling"].includes(job.status)
+                                }
+                                onClick={() => void retryResult(result)}
+                              >
+                                <RotateCcw size={13} /> Thử lại
+                              </Button>
+                            </div>
                           </article>
                         ))}
                       </div>
