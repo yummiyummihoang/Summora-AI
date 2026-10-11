@@ -100,6 +100,7 @@ const blankDoc = (): Doc => ({
   id: crypto.randomUUID(),
   title: "Văn bản mới",
   text: "",
+  selected: true,
   revision: 1,
 });
 const defaultSettings: Settings = {
@@ -311,7 +312,8 @@ export function Studio() {
   const fileInput = useRef<HTMLInputElement>(null);
   const promptInput = useRef<HTMLInputElement>(null);
 
-  const active = docs.find((doc) => doc.id === activeId) ?? docs[0];
+  const selectedDocs = docs.filter((doc) => doc.selected);
+  const active = selectedDocs.find((doc) => doc.id === activeId) ?? selectedDocs[0];
   const modelOptions = useMemo(
     () =>
       Object.entries(providers).flatMap(([provider, value]) =>
@@ -566,6 +568,7 @@ export function Studio() {
             revision: 1,
           }));
           if (imported.length) {
+            imported[0].selected = true;
             setDocs((old) => [
               ...old.filter((doc) => doc.text || doc.title !== "Văn bản mới"),
               ...imported,
@@ -888,7 +891,15 @@ export function Studio() {
                     <Button
                       variant="ghost"
                       className="h-auto min-w-0 flex-1 justify-start gap-2 px-0 py-0 text-inherit hover:bg-transparent"
-                      onClick={() => setActiveId(doc.id)}
+                      onClick={() => {
+                        setActiveId(doc.id);
+                        setDocs((old) =>
+                          old.map((item) =>
+                            item.id === doc.id ? { ...item, selected: true } : item,
+                          ),
+                        );
+                        markChanged();
+                      }}
                     >
                       <FileText size={16} />
                       <span className={ui.docTitle}>{doc.title || "Tài liệu chưa đặt tên"}</span>
@@ -896,13 +907,19 @@ export function Studio() {
                     <Checkbox
                       aria-label={`Chọn ${doc.title}`}
                       checked={!!doc.selected}
-                      onCheckedChange={(checked) =>
+                      onCheckedChange={(checked) => {
+                        const nextChecked = checked === true;
+                        const nextActive = nextChecked
+                          ? doc
+                          : docs.find((item) => item.id !== doc.id && item.selected);
+                        setActiveId(nextActive?.id || "");
                         setDocs((old) =>
                           old.map((item) =>
-                            item.id === doc.id ? { ...item, selected: checked === true } : item,
+                            item.id === doc.id ? { ...item, selected: nextChecked } : item,
                           ),
-                        )
-                      }
+                        );
+                        markChanged();
+                      }}
                     />
                   </div>
                 ))}
@@ -1402,7 +1419,7 @@ export function Studio() {
               <Button
                 className="max-sm:w-full"
                 disabled={busy || !active?.text.trim()}
-                onClick={() => void submitJob([active.id])}
+                onClick={() => active && void submitJob([active.id])}
               >
                 {busy ? (
                   <LoaderCircle size={16} className="animate-spin" />
