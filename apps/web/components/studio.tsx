@@ -18,6 +18,7 @@ import {
   MessageSquareText,
   Plus,
   Save,
+  Search,
   Settings2,
   Sparkles,
   Trash2,
@@ -152,6 +153,7 @@ const statuses: Record<string, string> = {
   running: "Đang xử lý",
   cancelling: "Đang dừng",
   completed: "Hoàn tất",
+  completed_with_errors: "Hoàn tất có lỗi",
   failed: "Thất bại",
   cancelled: "Đã hủy",
   interrupted: "Bị gián đoạn",
@@ -305,6 +307,9 @@ export function Studio() {
   const [job, setJob] = useState<Job | null>(null);
   const [resultDocId, setResultDocId] = useState("");
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [historySearchInput, setHistorySearchInput] = useState("");
+  const [historySearch, setHistorySearch] = useState("");
+  const [historyStatusFilter, setHistoryStatusFilter] = useState("all");
   const [profile, setProfile] = useState<{ dailyQuota: number } | null>(null);
   const [saved, setSaved] = useState(true);
   const [rightTab, setRightTab] = useState<"result" | "history">("result");
@@ -313,6 +318,7 @@ export function Studio() {
   const promptInput = useRef<HTMLInputElement>(null);
 
   const selectedDocs = docs.filter((doc) => doc.selected);
+  const allDocsSelected = docs.length > 0 && docs.every((doc) => doc.selected);
   const active = selectedDocs.find((doc) => doc.id === activeId) ?? selectedDocs[0];
   const modelOptions = useMemo(
     () =>
@@ -354,6 +360,17 @@ export function Studio() {
   );
   const selectedResults =
     job?.results.filter((result) => result.document_id === (resultDocId || active?.id)) ?? [];
+  const filteredHistory = useMemo(() => {
+    const query = historySearch.trim().toLocaleLowerCase("vi");
+    return history.filter((item) => {
+      const matchesQuery = !query || item.title.toLocaleLowerCase("vi").includes(query);
+      const completed = ["completed", "completed_with_errors"].includes(item.status);
+      const matchesStatus =
+        historyStatusFilter === "all" ||
+        (historyStatusFilter === "completed" ? completed : !completed);
+      return matchesQuery && matchesStatus;
+    });
+  }, [history, historySearch, historyStatusFilter]);
 
   const refreshHistory = useCallback(async () => {
     const result = await api<{ jobs: HistoryItem[] }>("/api/history");
@@ -461,6 +478,11 @@ export function Studio() {
   const markChanged = () => {
     setSaved(false);
     setNotice("");
+  };
+  const setAllDocumentsSelected = (selected: boolean) => {
+    setDocs((old) => old.map((doc) => ({ ...doc, selected })));
+    setActiveId(selected ? active?.id || docs[0]?.id || "" : "");
+    markChanged();
   };
   const setActiveText = (text: string) => {
     setDocs((old) =>
@@ -866,20 +888,36 @@ export function Studio() {
               <CardTitle className={ui.cardTitle}>
                 <Files size={17} /> Tài liệu <span className={ui.count}>{docs.length}</span>
               </CardTitle>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Thêm tài liệu"
-                title="Thêm tài liệu"
-                onClick={() => {
-                  const next = blankDoc();
-                  setDocs((old) => [...old, next]);
-                  setActiveId(next.id);
-                  markChanged();
-                }}
-              >
-                <Plus size={17} />
-              </Button>
+              <div className="flex shrink-0 items-center gap-2">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Checkbox
+                    aria-label="Chọn tất cả tài liệu"
+                    checked={allDocsSelected ? true : selectedDocs.length ? "indeterminate" : false}
+                    onCheckedChange={(checked) => setAllDocumentsSelected(checked === true)}
+                  />
+                  <button
+                    type="button"
+                    className="whitespace-nowrap hover:text-foreground"
+                    onClick={() => setAllDocumentsSelected(!allDocsSelected)}
+                  >
+                    {allDocsSelected ? "Bỏ chọn tất cả" : "Chọn tất cả"}
+                  </button>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Thêm tài liệu"
+                  title="Thêm tài liệu"
+                  onClick={() => {
+                    const next = blankDoc();
+                    setDocs((old) => [...old, next]);
+                    setActiveId(next.id);
+                    markChanged();
+                  }}
+                >
+                  <Plus size={17} />
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className={ui.docContent}>
               <div className={ui.docList}>
@@ -1742,53 +1780,100 @@ export function Studio() {
                 )}
               </div>
             ) : (
-              <div className={ui.historyList}>
-                {history.length ? (
-                  history.map((item) => (
-                    <div className={ui.historyItem} key={item.id}>
-                      <Button
-                        variant="ghost"
-                        className="h-auto min-w-0 flex-1 justify-start gap-2 px-1 py-1 text-left"
-                        onClick={() => void openHistory(item)}
-                      >
-                        <span className={ui.historyIcon}>
-                          <Clock3 size={15} />
-                        </span>
-                        <span className={ui.historyText}>
-                          <strong>{item.title}</strong>
-                          <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
-                            <small className="min-w-0">
-                              {prettyDate(item.created)} · {item.documents} tài liệu · {item.done}/
-                              {item.total}
-                            </small>
-                            <Badge className="shrink-0">
-                              {statuses[item.status] || item.status}
-                            </Badge>
-                          </span>
-                        </span>
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Xóa lượt"
-                        onClick={() =>
-                          void api(`/api/jobs/${item.id}/delete`, {})
-                            .then(refreshHistory)
-                            .catch((e) => setError(e.message))
-                        }
-                      >
-                        <Trash2 size={14} />
-                      </Button>
-                    </div>
-                  ))
-                ) : (
-                  <div className={ui.emptyResult}>
-                    <History size={24} />
-                    <strong>Lịch sử trống</strong>
-                    <span>Các lượt tóm tắt sẽ được lưu tự động.</span>
+              <>
+                <form
+                  className="grid gap-2 p-3 pb-0"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    setHistorySearch(historySearchInput.trim());
+                  }}
+                >
+                  <div className="flex min-w-0 gap-2">
+                    <Input
+                      aria-label="Tìm lịch sử theo tên tài liệu"
+                      placeholder="Tìm lịch sử…"
+                      className="min-w-0 flex-1"
+                      value={historySearchInput}
+                      onChange={(event) => setHistorySearchInput(event.target.value)}
+                    />
+                    <Button
+                      type="submit"
+                      variant="secondary"
+                      size="icon"
+                      className="shrink-0"
+                      aria-label="Tìm lịch sử"
+                      title="Tìm lịch sử"
+                    >
+                      <Search size={15} />
+                    </Button>
                   </div>
-                )}
-              </div>
+                  <SelectMenu
+                    aria-label="Lọc lịch sử theo trạng thái"
+                    className="w-full max-w-52"
+                    placeholder="Lọc trạng thái"
+                    value={historyStatusFilter}
+                    onValueChange={setHistoryStatusFilter}
+                    items={[
+                      { value: "all", label: "Tất cả trạng thái" },
+                      { value: "completed", label: "Hoàn tất" },
+                      { value: "incomplete", label: "Chưa hoàn tất" },
+                    ]}
+                  />
+                </form>
+                <div className={ui.historyList}>
+                  {history.length === 0 ? (
+                    <div className={ui.emptyResult}>
+                      <History size={24} />
+                      <strong>Lịch sử trống</strong>
+                      <span>Các lượt tóm tắt sẽ được lưu tự động.</span>
+                    </div>
+                  ) : filteredHistory.length === 0 ? (
+                    <div className={ui.emptyResult}>
+                      <Search size={24} />
+                      <strong>Không tìm thấy lịch sử phù hợp</strong>
+                      <span>Thử từ khóa hoặc trạng thái khác.</span>
+                    </div>
+                  ) : (
+                    filteredHistory.map((item) => (
+                      <div className={ui.historyItem} key={item.id}>
+                        <Button
+                          variant="ghost"
+                          className="h-auto min-w-0 flex-1 justify-start gap-2 px-1 py-1 text-left"
+                          onClick={() => void openHistory(item)}
+                        >
+                          <span className={ui.historyIcon}>
+                            <Clock3 size={15} />
+                          </span>
+                          <span className={ui.historyText}>
+                            <strong>{item.title}</strong>
+                            <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
+                              <small className="min-w-0">
+                                {prettyDate(item.created)} · {item.documents} tài liệu · {item.done}/
+                                {item.total}
+                              </small>
+                              <Badge className="shrink-0">
+                                {statuses[item.status] || item.status}
+                              </Badge>
+                            </span>
+                          </span>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Xóa lượt"
+                          onClick={() =>
+                            void api(`/api/jobs/${item.id}/delete`, {})
+                              .then(refreshHistory)
+                              .catch((e) => setError(e.message))
+                          }
+                        >
+                          <Trash2 size={14} />
+                        </Button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
             )}
           </Card>
           <div className={ui.privacyNote}>
