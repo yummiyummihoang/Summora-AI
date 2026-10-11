@@ -24,11 +24,14 @@ export function SelectMenu({
       <SelectPrimitive.Trigger
         aria-label={ariaLabel}
         className={cn(
-          "inline-flex h-10 w-full min-w-0 items-center justify-between gap-2 whitespace-nowrap rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+          "inline-flex h-10 w-full min-w-0 items-center justify-between gap-2 overflow-hidden whitespace-nowrap rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
           className,
         )}
       >
-        <SelectPrimitive.Value className="min-w-0 flex-1 truncate" placeholder={placeholder} />
+        <SelectPrimitive.Value
+          className="block min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap"
+          placeholder={placeholder}
+        />
         <SelectPrimitive.Icon asChild>
           <ChevronDown size={15} aria-hidden="true" />
         </SelectPrimitive.Icon>

@@ -298,6 +298,9 @@ export function Studio() {
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [field, setField] = useState("document");
   const [privatePrompts, setPrivatePrompts] = useState<Prompt[]>([]);
+  const [promptLibrarySelection, setPromptLibrarySelection] = useState("");
+  const [privatePromptPickerOpen, setPrivatePromptPickerOpen] = useState(false);
+  const [selectedPrivatePromptIndexes, setSelectedPrivatePromptIndexes] = useState<number[]>([]);
   const [job, setJob] = useState<Job | null>(null);
   const [resultDocId, setResultDocId] = useState("");
   const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -320,6 +323,32 @@ export function Studio() {
         })),
       ),
     [providers],
+  );
+  const promptLibraryOptions = useMemo(
+    () => [
+      ...library.flatMap((set) => [
+        {
+          value: `set:${set.id}:all`,
+          label: `${set.name} · Tất cả (${set.prompts.length})`,
+          prompts: set.prompts,
+        },
+        ...set.prompts.map((prompt, index) => ({
+          value: `set:${set.id}:prompt:${index}`,
+          label: `${set.name} · ${prompt.name}`,
+          prompts: [prompt],
+        })),
+      ]),
+      ...(privatePrompts.length
+        ? [
+            {
+              value: "private",
+              label: `Thư viện của tôi · Chọn prompt (${privatePrompts.length})`,
+              prompts: [],
+            },
+          ]
+        : []),
+    ],
+    [library, privatePrompts],
   );
   const selectedResults =
     job?.results.filter((result) => result.document_id === (resultDocId || active?.id)) ?? [];
@@ -1119,12 +1148,18 @@ export function Studio() {
                 <SelectMenu
                   aria-label="Chọn thư viện prompt"
                   className="col-span-3 w-full min-w-0 sm:col-span-1 sm:w-auto sm:flex-1"
-                  placeholder="Nạp prompt mẫu…"
+                  placeholder="Chọn prompt từ thư viện…"
+                  value={promptLibrarySelection}
                   onValueChange={(value) => {
-                    const prompts =
-                      value === "private"
-                        ? privatePrompts
-                        : library.find((set) => set.id === value)?.prompts;
+                    setPromptLibrarySelection(value);
+                    if (value === "private") {
+                      setSelectedPrivatePromptIndexes([]);
+                      setPrivatePromptPickerOpen(true);
+                      return;
+                    }
+                    setPrivatePromptPickerOpen(false);
+                    const prompts = promptLibraryOptions.find((option) => option.value === value)
+                      ?.prompts;
                     if (prompts?.length) {
                       setSettings((old) => ({
                         ...old,
@@ -1136,12 +1171,7 @@ export function Studio() {
                       markChanged();
                     }
                   }}
-                  items={[
-                    ...library.map((set) => ({ value: set.id, label: set.name })),
-                    ...(privatePrompts.length
-                      ? [{ value: "private", label: "Thư viện của tôi" }]
-                      : []),
-                  ]}
+                  items={promptLibraryOptions.map(({ value, label }) => ({ value, label }))}
                 />
                 <Button
                   variant="secondary"
@@ -1192,6 +1222,116 @@ export function Studio() {
                   }}
                 />
               </div>
+              {privatePromptPickerOpen && (
+                <div
+                  role="region"
+                  aria-label="Chọn prompt trong thư viện của tôi"
+                  className="mt-3 max-h-96 space-y-3 overflow-y-auto rounded-md border bg-muted/30 p-3"
+                >
+                  <div>
+                    <p className="text-sm font-medium">Chọn prompt muốn dùng</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Xem nội dung rồi tích một hoặc nhiều prompt. Chỉ prompt được tích mới được
+                      thêm vào phiên tóm tắt.
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Tối đa 10 prompt cho mỗi lần tóm tắt.
+                    </p>
+                  </div>
+                  {privatePrompts.map((prompt, index) => (
+                    <div
+                      className="flex items-start gap-3 rounded-md border bg-background p-3"
+                      key={`${index}-${prompt.name}`}
+                    >
+                      <Checkbox
+                        aria-label={`Chọn prompt ${prompt.name}`}
+                        disabled={
+                          selectedPrivatePromptIndexes.length >= 10 &&
+                          !selectedPrivatePromptIndexes.includes(index)
+                        }
+                        checked={selectedPrivatePromptIndexes.includes(index)}
+                        onCheckedChange={(checked) =>
+                          setSelectedPrivatePromptIndexes((old) =>
+                            checked
+                              ? old.includes(index)
+                                ? old
+                                : [...old, index]
+                              : old.filter((selectedIndex) => selectedIndex !== index),
+                          )
+                        }
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium">{prompt.name || `Prompt ${index + 1}`}</p>
+                        <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-muted-foreground">
+                          {prompt.text}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+                    <span className="text-xs text-muted-foreground">
+                      {selectedPrivatePromptIndexes.length}/{privatePrompts.length} đã chọn
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={selectedPrivatePromptIndexes.length >= 10}
+                        onClick={() =>
+                          setSelectedPrivatePromptIndexes(
+                            privatePrompts.slice(0, 10).map((_, index) => index),
+                          )
+                        }
+                      >
+                        {privatePrompts.length > 10 ? "Chọn 10 đầu tiên" : "Chọn tất cả"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setSelectedPrivatePromptIndexes([])}
+                      >
+                        Bỏ chọn
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={
+                          selectedPrivatePromptIndexes.length === 0 ||
+                          selectedPrivatePromptIndexes.length > 10
+                        }
+                        onClick={() => {
+                          const prompts = privatePrompts.filter((_, index) =>
+                            selectedPrivatePromptIndexes.includes(index),
+                          );
+                          setSettings((old) => ({
+                            ...old,
+                            prompts,
+                            parameters: prompts.some((prompt) => prompt.text.includes("{N}"))
+                              ? { ...old.parameters, N: old.parameters?.N || 1 }
+                              : old.parameters,
+                          }));
+                          markChanged();
+                          setNotice(`Đã chọn ${prompts.length} prompt từ thư viện của bạn.`);
+                          setPrivatePromptPickerOpen(false);
+                          setPromptLibrarySelection("");
+                        }}
+                      >
+                        Dùng {selectedPrivatePromptIndexes.length} prompt
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setPrivatePromptPickerOpen(false);
+                          setPromptLibrarySelection("");
+                        }}
+                      >
+                        Đóng
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </aside>
@@ -1599,12 +1739,16 @@ export function Studio() {
                         </span>
                         <span className={ui.historyText}>
                           <strong>{item.title}</strong>
-                          <small>
-                            {prettyDate(item.created)} · {item.documents} tài liệu · {item.done}/
-                            {item.total}
-                          </small>
+                          <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
+                            <small className="min-w-0">
+                              {prettyDate(item.created)} · {item.documents} tài liệu · {item.done}/
+                              {item.total}
+                            </small>
+                            <Badge className="shrink-0">
+                              {statuses[item.status] || item.status}
+                            </Badge>
+                          </span>
                         </span>
-                        <Badge>{statuses[item.status] || item.status}</Badge>
                       </Button>
                       <Button
                         variant="ghost"
