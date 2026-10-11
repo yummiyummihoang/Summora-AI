@@ -21,6 +21,7 @@ from summora.tasks import normalize_payload
 from summora.worker import loop
 
 MAX_BODY = 25 * 1024 * 1024
+MAX_PROMPTS_PER_DOCUMENT = 50
 
 
 def create_app(
@@ -147,8 +148,8 @@ def create_app(
             ):
                 raise ValueError("Tài liệu không hợp lệ.")
             prompts = {**common, **doc.get("overrides", {})}.get("prompts")
-            if not isinstance(prompts, list) or not 1 <= len(prompts) <= 10:
-                raise ValueError("Mỗi tài liệu cần 1–10 prompt.")
+            if not isinstance(prompts, list) or not 1 <= len(prompts) <= MAX_PROMPTS_PER_DOCUMENT:
+                raise ValueError("Mỗi tài liệu cần 1–50 prompt.")
             for prompt in prompts:
                 if (
                     not isinstance(prompt, dict)

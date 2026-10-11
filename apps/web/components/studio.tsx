@@ -37,6 +37,15 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 
@@ -51,6 +60,7 @@ type Doc = {
   settings?: Settings;
 };
 type Prompt = { name: string; text: string };
+const MAX_PROMPTS_PER_SUMMARY = 50;
 type Settings = {
   provider: string;
   model: string;
@@ -813,15 +823,14 @@ export function Studio() {
     return (
       <main className={ui.authShell}>
         <section className={ui.authBrand}>
-          <div className={ui.brandLockup}>
-            <div className={ui.brandMark}>
-              <BookOpen size={19} />
-            </div>
-            <div>
-              <strong>Summora</strong>
-              <span>Không gian đọc tài liệu</span>
-            </div>
-          </div>
+          <Image
+            src="/summora-logo.png"
+            alt="Summora — Nền tảng tóm tắt văn bản bằng AI"
+            width={220}
+            height={64}
+            className="h-12 w-auto shrink-0 object-contain"
+            priority
+          />
           <div className={ui.authBrandCopy}>
             <p className={ui.eyebrow}>ĐỌC VÀ TÓM TẮT</p>
             <h1 className={ui.authTitle}>
@@ -1323,8 +1332,9 @@ export function Studio() {
                 <Button
                   variant="secondary"
                   size="icon"
+                  disabled={settings.prompts.length >= MAX_PROMPTS_PER_SUMMARY}
                   onClick={() => {
-                    if (settings.prompts.length < 10) {
+                    if (settings.prompts.length < MAX_PROMPTS_PER_SUMMARY) {
                       setSettings((old) => ({
                         ...old,
                         prompts: [
@@ -1369,23 +1379,32 @@ export function Studio() {
                   }}
                 />
               </div>
-              {privatePromptPickerOpen && (
-                <div
-                  role="region"
-                  aria-label="Chọn prompt trong thư viện của tôi"
-                  className="mt-3 max-h-96 space-y-3 overflow-y-auto rounded-md border bg-muted/30 p-3"
-                >
-                  <div>
-                    <p className="text-sm font-medium">Chọn prompt muốn dùng</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
+              <Dialog
+                open={privatePromptPickerOpen}
+                onOpenChange={(open) => {
+                  setPrivatePromptPickerOpen(open);
+                  if (!open) setPromptLibrarySelection("");
+                }}
+              >
+                <DialogContent aria-describedby="private-prompt-picker-description">
+                  <DialogHeader>
+                    <DialogTitle>Chọn prompt muốn dùng</DialogTitle>
+                    <DialogDescription id="private-prompt-picker-description">
                       Xem nội dung rồi tích một hoặc nhiều prompt. Chỉ prompt được tích mới được
-                      thêm vào phiên tóm tắt.
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Tối đa 10 prompt cho mỗi lần tóm tắt.
-                    </p>
-                  </div>
-                  {privatePrompts.map((prompt, index) => (
+                      thêm vào phiên tóm tắt. Tối đa 50 prompt cho mỗi lần tóm tắt.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div
+                    role="region"
+                    aria-label="Danh sách prompt trong thư viện của tôi"
+                    className="mt-5 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1"
+                  >
+                    {privatePrompts.length === 0 ? (
+                      <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+                        Thư viện của bạn chưa có prompt nào.
+                      </p>
+                    ) : null}
+                    {privatePrompts.map((prompt, index) => (
                     <div
                       className="flex items-start gap-3 rounded-md border bg-background p-3"
                       key={`${index}-${prompt.name}`}
@@ -1393,7 +1412,7 @@ export function Studio() {
                       <Checkbox
                         aria-label={`Chọn prompt ${prompt.name}`}
                         disabled={
-                          selectedPrivatePromptIndexes.length >= 10 &&
+                          selectedPrivatePromptIndexes.length >= MAX_PROMPTS_PER_SUMMARY &&
                           !selectedPrivatePromptIndexes.includes(index)
                         }
                         checked={selectedPrivatePromptIndexes.includes(index)}
@@ -1478,23 +1497,28 @@ export function Studio() {
                         </>
                       )}
                     </div>
-                  ))}
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
-                    <span className="text-xs text-muted-foreground">
-                      {selectedPrivatePromptIndexes.length}/{privatePrompts.length} đã chọn
-                    </span>
-                    <div className="flex flex-wrap gap-2">
+                    ))}
+                  </div>
+                  <DialogFooter className="mt-4 justify-between">
+                    <div className="flex flex-wrap items-center gap-1">
+                      <span className="mr-1 text-xs text-muted-foreground">
+                        {selectedPrivatePromptIndexes.length}/{privatePrompts.length} đã chọn
+                      </span>
                       <Button
                         size="sm"
                         variant="ghost"
-                        disabled={selectedPrivatePromptIndexes.length >= 10}
+                        disabled={selectedPrivatePromptIndexes.length >= MAX_PROMPTS_PER_SUMMARY}
                         onClick={() =>
                           setSelectedPrivatePromptIndexes(
-                            privatePrompts.slice(0, 10).map((_, index) => index),
+                            privatePrompts
+                              .slice(0, MAX_PROMPTS_PER_SUMMARY)
+                              .map((_, index) => index),
                           )
                         }
                       >
-                        {privatePrompts.length > 10 ? "Chọn 10 đầu tiên" : "Chọn tất cả"}
+                        {privatePrompts.length > MAX_PROMPTS_PER_SUMMARY
+                          ? "Chọn 50 đầu tiên"
+                          : "Chọn tất cả"}
                       </Button>
                       <Button
                         size="sm"
@@ -1503,12 +1527,19 @@ export function Studio() {
                       >
                         Bỏ chọn
                       </Button>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <DialogClose asChild>
+                        <Button size="sm" variant="outline">
+                          Đóng
+                        </Button>
+                      </DialogClose>
                       <Button
                         size="sm"
                         variant="secondary"
                         disabled={
                           selectedPrivatePromptIndexes.length === 0 ||
-                          selectedPrivatePromptIndexes.length > 10
+                          selectedPrivatePromptIndexes.length > MAX_PROMPTS_PER_SUMMARY
                         }
                         onClick={() => {
                           const prompts = privatePrompts.filter((_, index) =>
@@ -1529,20 +1560,10 @@ export function Studio() {
                       >
                         Dùng {selectedPrivatePromptIndexes.length} prompt
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setPrivatePromptPickerOpen(false);
-                          setPromptLibrarySelection("");
-                        }}
-                      >
-                        Đóng
-                      </Button>
                     </div>
-                  </div>
-                </div>
-              )}
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </CardContent>
           </Card>
         </aside>
