@@ -28,6 +28,8 @@ Set these environment variables for Production and Preview as needed:
 | `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY` | Optional server-only provider credentials                                                                |
 | `OPENAI_MODELS`, `DEEPSEEK_MODELS`, `OPENROUTER_MODELS`, `GEMINI_MODELS`     | Comma-separated model IDs enabled for the matching provider                                              |
 
+To route GPT-6 Luna, DeepSeek V4.1 Flash, Gemini 3.8 Flash and Claude Sonnet 5.5 through one OpenRouter account, set only `OPENROUTER_API_KEY` and `OPENROUTER_MODELS`. Use these model IDs: `openai/gpt-6-luna`, `deepseek/deepseek-v4.1-flash-1017`, `google/gemini-3.8-flash`, and `anthropic/claude-sonnet-5.5`. In the app, choose the **OpenRouter** provider and then choose the desired model. You do not need separate provider keys for requests routed through OpenRouter. Keep this API key server-side; never use a `NEXT_PUBLIC_` prefix.
+
 Never expose provider credentials, database URLs, or the Supabase service role key through a `NEXT_PUBLIC_` variable. For a Supabase project in Mumbai, `apps/web/vercel.json` places server functions in Vercel's `bom1` region to keep database and storage requests nearby. Change that region if the database is elsewhere.
 
 Before the first deployment, apply migrations once from a trusted machine with the database connection configured:
