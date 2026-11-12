@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["bom1"],
+  "functions": {
+    "app/.well-known/workflow/v1/**/*.ts": { "maxDuration": 180 },
+    "app/api/**/*.ts": { "maxDuration": 60 }
+  },
+  "crons": [{ "path": "/api/cron/retention", "schedule": "0 0 * * *" }],
+  "installCommand": "cd ../.. && corepack pnpm install --frozen-lockfile",
+  "buildCommand": "cd ../.. && corepack pnpm db:generate && corepack pnpm --filter @summora/web build"
+}

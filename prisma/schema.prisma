@@ -46,6 +46,7 @@ model Job {
   charged  Int     @default(0)
   cancel   Boolean @default(false)
   deleted  Boolean @default(false)
+  workflowRun String? @map("workflow_run")
 
   @@unique([owner, idem])
   @@index([status, created])

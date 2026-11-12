@@ -1,11 +1,11 @@
 import type { NextConfig } from "next";
-
-const api = process.env.FASTAPI_INTERNAL_URL;
+import { withWorkflow } from "workflow/next";
 
 const nextConfig: NextConfig = {
-  async rewrites() {
-    return api ? [{ source: "/api/:path*", destination: `${api}/api/:path*` }] : [];
+  experimental: {
+    agentUpgrade: "security",
   },
+  serverExternalPackages: ["pdf-parse", "mammoth"],
 };
 
-export default nextConfig;
+export default withWorkflow(nextConfig);

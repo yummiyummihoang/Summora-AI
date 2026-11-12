@@ -1,82 +1,62 @@
 # Summora AI
 
-Summora là không gian tóm tắt tài liệu bằng AI. Ứng dụng gồm giao diện Next.js, Supabase Auth/PostgreSQL và API/worker Python FastAPI. Các luồng chính gồm nhập TXT/DOCX/PDF/JSON/CSV, cấu hình model và prompt, xử lý job có hàng đợi, xem lịch sử, lưu bản nháp và tải kết quả JSON.
+Summora imports documents, validates prompt/model settings, and runs Vietnamese summaries. On this branch, Next.js handles the UI and API, Supabase provides Auth/Postgres/private Storage, and Vercel Workflow runs durable background jobs. The older Python service files remain in the repository but are not part of this Vercel deployment.
 
-## Công nghệ
+## Stack
 
-- `apps/web`: Next.js App Router, pnpm, Tailwind CSS và các component theo shadcn/ui.
-- Supabase: đăng ký/đăng nhập email và PostgreSQL.
-- Prisma: schema/migration và các thao tác hồ sơ, bản nháp, thư viện prompt trong Next.js.
-- `services/api/summora/`: FastAPI xác minh Supabase JWT, nhập tài liệu và quản lý API job.
-- `services/api/summora.worker`: worker Python gọi provider; SQLAlchemy kết nối cùng Supabase PostgreSQL.
+- Next.js 16, React 19, TypeScript and Tailwind CSS in `apps/web`.
+- Supabase Auth and PostgreSQL, accessed by the server through Prisma.
+- Vercel Workflow SDK for durable job processing. Workflow events carry only a job ID; documents and progress stay in Postgres.
+- Supabase private Storage for completed JSON files and short-lived signed downloads.
 
-## Cấu hình local
+## Deploy to Vercel
 
-1. Tạo Supabase project và bật email/password trong Authentication. Dùng URL project, publishable/anon key và connection string PostgreSQL từ Project Settings.
-2. Sao chép `.env.example` thành `.env` ở repo root cho FastAPI/worker và Prisma CLI. Sao chép `apps/web/.env.local.example` thành `apps/web/.env.local` cho Next.js; điền Supabase URL/key cùng database URLs ở cả hai file. Dùng PostgreSQL connection trực tiếp hoặc session pooler; worker cần giữ một PostgreSQL session để khóa advisory hoạt động.
-3. Cài Python 3.10+, Node.js 20.9+ và pnpm 10+.
+Create a Vercel project from this repository and set **Root Directory** to `apps/web`. Keep the install and build commands from `apps/web/vercel.json`; they install the pnpm monorepo, generate Prisma Client, and build the Next.js app. Use Node.js 22.12 or newer.
 
-```powershell
-pnpm install
-pnpm db:generate
-pnpm db:migrate
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.lock.txt
-```
+Set these environment variables for Production and Preview as needed:
 
-Mở ba terminal tại thư mục repo:
+| Variable                                                                     | Purpose                                                                                                  |
+| ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`                                                   | Supabase project URL                                                                                     |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`                                       | Supabase browser/Auth key                                                                                |
+| `SUPABASE_SERVICE_ROLE_KEY`                                                  | Server-only private Storage uploads, deletes and signed URLs                                             |
+| `DATABASE_URL`                                                               | Supabase Postgres runtime connection string; use the transaction pooler with `?pgbouncer=true` if needed |
+| `DIRECT_URL`                                                                 | Direct/session Postgres connection for Prisma migrations                                                 |
+| `STUDIO_RESULTS_BUCKET`                                                      | Private bucket name; defaults to `summora-results`                                                       |
+| `CRON_SECRET`                                                                | Long random secret protecting the retention cron                                                         |
+| `STUDIO_RETENTION_DAYS`                                                      | Completed job/draft retention; defaults to 30 days                                                       |
+| `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY` | Optional server-only provider credentials                                                                |
+| `OPENAI_MODELS`, `DEEPSEEK_MODELS`, `OPENROUTER_MODELS`, `GEMINI_MODELS`     | Comma-separated model IDs enabled for the matching provider                                              |
 
-```powershell
-pnpm dev
-```
+Never expose provider credentials, database URLs, or the Supabase service role key through a `NEXT_PUBLIC_` variable. For a Supabase project in Mumbai, `apps/web/vercel.json` places server functions in Vercel's `bom1` region to keep database and storage requests nearby. Change that region if the database is elsewhere.
 
-```powershell
-$env:PYTHONPATH = "services/api"; .\.venv\Scripts\python.exe -m uvicorn summora.api:create_app --factory --app-dir services/api --host 127.0.0.1 --port 8000
-```
-
-```powershell
-$env:PYTHONPATH = "services/api"; .\.venv\Scripts\python.exe -m summora.worker
-```
-
-Truy cập <http://localhost:3000>. Khi bật email confirmation, người đăng ký cần xác nhận email trước khi đăng nhập. Trong local, có thể tắt confirmation trong Supabase Auth để thử nhanh.
-
-## Biến môi trường
-
-`DATABASE_URL` dùng bởi FastAPI/SQLAlchemy và Prisma runtime. `DIRECT_URL` dùng bởi Prisma migration. Cả hai cần trỏ tới cùng Supabase database. `FASTAPI_INTERNAL_URL` mặc định là `http://localhost:8000` trong Next.js dev. `WEB_ORIGIN` phải khớp origin của trình duyệt. Provider keys và model names chỉ được đọc phía Python, không trả key cho trình duyệt.
-
-Các bảng mới được khai báo trong `prisma/schema.prisma` và migration `prisma/migrations`. Migration tạo profile khi người dùng đăng ký và bật RLS; web/API xác thực quyền sở hữu theo `user_id`. Không đặt Supabase service role key trong biến `NEXT_PUBLIC_*`.
-
-## Docker triển khai
-
-Sao chép `.env.deploy.example` thành `.env.deploy`, cấu hình domain, Supabase connection và provider. Sau đó chạy:
+Before the first deployment, apply migrations once from a trusted machine with the database connection configured:
 
 ```sh
-docker compose --env-file .env.deploy build
-docker compose --env-file .env.deploy up -d
+corepack pnpm install --frozen-lockfile
+corepack pnpm db:migrate
 ```
 
-Caddy nhận HTTPS và gửi tới Next.js. Next.js proxy `/api/*` nội bộ tới FastAPI; worker xử lý job tuần tự. PostgreSQL/Auth được cung cấp bởi Supabase. Chỉ chạy một worker cho cùng database; PostgreSQL advisory lock ngăn một worker thứ hai khởi động.
+The Vercel build does not run database migrations. Vercel Workflow is enabled by `withWorkflow` in `apps/web/next.config.ts`; its generated handlers are excluded from the auth proxy. The daily cron removes expired job payloads and result files. Vercel Workflows setup details: <https://workflow-sdk.dev/worlds/vercel>.
 
-## Bảo mật và dữ liệu
+## Run locally
 
-- Supabase Auth quản lý mật khẩu, phiên và xác minh email.
-- FastAPI xác minh access token bằng Supabase JWKS (JWT HS256 cần `SUPABASE_JWT_SECRET`).
-- File kết quả tạm nằm trong `studio_data/`; xóa job hoặc hết thời hạn lưu sẽ xóa nội dung liên quan.
-- Không có dữ liệu SQLite lịch sử trong repository để nhập. Bản triển khai bắt đầu với Supabase database mới.
-- Bật backup/point-in-time recovery trong Supabase theo gói hosting và lưu API keys ngoài Git.
-
-## Kiểm tra
+Create `apps/web/.env.local` using `apps/web/.env.local.example`, then configure Supabase Auth, the same Postgres database, a private `summora-results` Storage bucket, and at least one provider/model pair.
 
 ```powershell
-pnpm format:check
-pnpm lint
-pnpm db:generate
-pnpm build
-$env:PYTHONPATH = "services/api"
-.\.venv\Scripts\python.exe -m compileall -q services/api/summora tests
-.\.venv\Scripts\ruff.exe check services/api tests
-.\.venv\Scripts\ruff.exe format --check services/api tests
-.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+corepack pnpm install
+corepack pnpm db:generate
+corepack pnpm db:migrate
+corepack pnpm dev
 ```
 
-Luồng tích hợp cần Supabase project và provider key: đăng ký/xác nhận email, job mẫu, quota, hủy job, worker restart, ownership giữa hai tài khoản và tải JSON. Không cần provider thật để chạy unit tests hiện có.
+Open <http://localhost:3000>. Workflow SDK uses its local world during development; no separate API or worker process is needed for this branch. If Storage service credentials are not configured locally, completed results are returned from the job state for direct download.
+
+## Data and security
+
+- Supabase Auth owns user identity; API handlers enforce job ownership and same-origin writes.
+- Postgres stores drafts, private prompts, job state, quotas, idempotency keys and rate limits.
+- Provider keys are read only by server functions and are never returned to the browser.
+- Result objects live in a private Supabase Storage bucket; downloads use five-minute signed URLs.
+- Workflow steps check cancellation between provider calls, persist each result, and charge task quota once per saved result.
+- The Vercel cron requires `CRON_SECRET` and prunes completed jobs and drafts after the configured retention period.
