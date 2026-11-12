@@ -205,7 +205,12 @@ class Store:
                 "success": 0,
                 "errors": 0,
                 "documents": documents,
-                "tasks": tasks,
+                # Rendered prompts duplicate each source document once per task. Rebuild them
+                # inside the worker so a single job cannot inflate its Postgres JSON state.
+                "tasks": [
+                    {key: value for key, value in task.items() if key != "rendered_prompt"}
+                    for task in tasks
+                ],
                 "results": [],
                 "message": "Đang chờ xử lý.",
                 "download_ready": False,
@@ -327,6 +332,8 @@ class Store:
             )
             for row in rows:
                 state = _json(row["state"])
+                for task in state["tasks"]:
+                    task.pop("rendered_prompt", None)
                 path = self.directory / (row["id"] + ".json")
                 if path.is_file():
                     try:
@@ -382,6 +389,8 @@ class Store:
             if not row:
                 return None
             state = _json(row["state"])
+            for task in state["tasks"]:
+                task.pop("rendered_prompt", None)
             state.update(status="running", message="Đang bắt đầu…")
             db.execute(
                 text("UPDATE jobs SET status='running',state=CAST(:state AS jsonb) WHERE id=:id"),
@@ -406,6 +415,7 @@ class Store:
             db.execute(text("DELETE FROM limits WHERE expires<:now"), {"now": time.time()})
         for job_id in rows:
             (self.directory / (job_id + ".json")).unlink(missing_ok=True)
+        return rows
 
     def update(self, state, charge=False, final=False):
         with self.engine.begin() as db:

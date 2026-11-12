@@ -6,14 +6,14 @@ from zipfile import ZipFile
 
 from summora.formats import import_file, parse_data, parse_prompts
 
-MAX_FILE = 24 * 1024 * 1024
+MAX_FILE = 3 * 1024 * 1024
 
 
 def import_document(content, filename, kind="data", field="document"):
     if kind not in {"data", "prompts"}:
         raise ValueError("Loại file không hợp lệ.")
     if not isinstance(content, bytes) or not content or len(content) > MAX_FILE:
-        raise ValueError("File rỗng hoặc vượt giới hạn 24 MB.")
+        raise ValueError("File rỗng hoặc vượt giới hạn 3 MB.")
     name = Path(filename.replace("\\", "/")).name
     ext = Path(name).suffix.lower()
     if ext in {".json", ".csv"}:
@@ -85,7 +85,7 @@ def import_document(content, filename, kind="data", field="document"):
     if not text.strip():
         raise ValueError("Không tìm thấy văn bản. PDF scan/ảnh cần OCR hoặc dán nội dung thủ công.")
     if len(text.encode("utf-8")) > MAX_FILE:
-        raise ValueError("Nội dung trích xuất vượt giới hạn 24 MB.")
+        raise ValueError("Nội dung trích xuất vượt giới hạn 3 MB.")
     if kind == "prompts":
         return [{"name": Path(name).stem, "text": text.strip()}]
     return [{"title": Path(name).stem, "text": text.strip(), "source": name}]

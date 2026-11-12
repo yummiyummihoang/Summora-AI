@@ -35,10 +35,7 @@ export function DialogContent({
   );
 }
 
-export function DialogHeader({
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
+export function DialogHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return <div className={cn("flex flex-col gap-1.5 pr-8", className)} {...props} />;
 }
 
@@ -61,16 +58,10 @@ export function DialogDescription({
   );
 }
 
-export function DialogFooter({
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
+export function DialogFooter({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn(
-        "flex flex-col gap-2 border-t pt-4 sm:flex-row sm:items-center",
-        className,
-      )}
+      className={cn("flex flex-col gap-2 border-t pt-4 sm:flex-row sm:items-center", className)}
       {...props}
     />
   );

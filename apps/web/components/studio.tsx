@@ -61,6 +61,8 @@ type Doc = {
 };
 type Prompt = { name: string; text: string };
 const MAX_PROMPTS_PER_SUMMARY = 50;
+const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
+const MAX_API_BODY_BYTES = 4 * 1024 * 1024;
 type Settings = {
   provider: string;
   model: string;
@@ -162,8 +164,12 @@ async function api<T = unknown>(
   };
   if (body instanceof FormData) options.body = body;
   else if (body !== undefined) {
+    const serialized = JSON.stringify(body);
+    if (new TextEncoder().encode(serialized).byteLength > MAX_API_BODY_BYTES) {
+      throw new Error("Dữ liệu gửi vượt giới hạn 4 MB của Vercel.");
+    }
     options.headers = { ...options.headers, "Content-Type": "application/json" };
-    options.body = JSON.stringify(body);
+    options.body = serialized;
   }
   const response = await fetch(path, options);
   if (!response.ok) {
@@ -237,7 +243,8 @@ const ui = {
     "flex max-w-full flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-2 text-xs text-muted-foreground [&_strong]:font-semibold [&_strong]:text-foreground",
   globalNotice:
     "mb-4 flex items-center justify-between gap-3 rounded-md border bg-muted p-3 text-sm text-foreground",
-  workspace: "mt-4 grid min-w-0 grid-cols-1 items-start gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-12",
+  workspace:
+    "mt-4 grid min-w-0 grid-cols-1 items-start gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-12",
   leftColumn: "flex min-w-0 flex-col gap-3 sm:gap-4 md:col-span-1 xl:col-span-3",
   centerColumn: "flex min-w-0 flex-col gap-3 sm:gap-4 md:col-span-2 xl:col-span-6",
   rightColumn: "flex min-w-0 flex-col gap-3 sm:gap-4 md:col-span-2 xl:col-span-3",
@@ -344,7 +351,6 @@ export function Studio() {
   const [historySearchInput, setHistorySearchInput] = useState("");
   const [historySearch, setHistorySearch] = useState("");
   const [historyStatusFilter, setHistoryStatusFilter] = useState("all");
-  const [profile, setProfile] = useState<{ dailyQuota: number } | null>(null);
   const [saved, setSaved] = useState(true);
   const [rightTab, setRightTab] = useState<"result" | "history">("result");
   const [dragging, setDragging] = useState(false);
@@ -417,7 +423,6 @@ export function Studio() {
       setUser(null);
       setHistory([]);
       setJob(null);
-      setProfile(null);
       return;
     }
     setWorkspaceReady(false);
@@ -427,13 +432,10 @@ export function Studio() {
       return;
     }
     setUser({ id: session.user.id, email: session.user.email });
-    const [draftResponse, promptResponse, historyResponse, profileResponse] = await Promise.all([
+    const [draftResponse, promptResponse, historyResponse] = await Promise.all([
       api<{ draft: DraftData | null }>("/api/draft"),
       api<{ prompts: Prompt[] }>("/api/my-prompts"),
       api<{ jobs: HistoryItem[] }>("/api/history"),
-      fetch("/api/profile").then(
-        (response) => response.json() as Promise<{ profile?: { dailyQuota: number } }>,
-      ),
     ]);
     const draft = draftResponse.draft;
     if (draft && Array.isArray(draft.documents) && draft.documents.length) {
@@ -444,7 +446,6 @@ export function Studio() {
     }
     setPrivatePrompts(promptResponse.prompts || []);
     setHistory(historyResponse.jobs || []);
-    setProfile(profileResponse.profile || null);
     setWorkspaceReady(true);
   }, []);
 
@@ -602,6 +603,9 @@ export function Studio() {
     setError("");
     for (const file of Array.from(files)) {
       try {
+        if (file.size > MAX_UPLOAD_BYTES) {
+          throw new Error("File vượt giới hạn 3 MB trên Vercel.");
+        }
         const form = new FormData();
         form.append("file", file);
         form.append("kind", kind);
@@ -746,6 +750,15 @@ export function Studio() {
       setError("Chưa có file kết quả để tải.");
       return;
     }
+    if (response.headers.get("content-type")?.includes("application/json")) {
+      const { url } = (await response.json()) as { url?: string };
+      if (url) {
+        window.location.assign(url);
+        return;
+      }
+      setError("Chưa có file kết quả để tải.");
+      return;
+    }
     const url = URL.createObjectURL(await response.blob());
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -785,9 +798,7 @@ export function Studio() {
       setSettings((old) => ({
         ...old,
         prompts: old.prompts.map((prompt) =>
-          prompt.name === original?.name && prompt.text === original?.text
-            ? updatedPrompt
-            : prompt,
+          prompt.name === original?.name && prompt.text === original?.text ? updatedPrompt : prompt,
         ),
       }));
       setEditingPrivatePromptIndex(null);
@@ -1314,8 +1325,9 @@ export function Studio() {
                       return;
                     }
                     setPrivatePromptPickerOpen(false);
-                    const prompts = promptLibraryOptions.find((option) => option.value === value)
-                      ?.prompts;
+                    const prompts = promptLibraryOptions.find(
+                      (option) => option.value === value,
+                    )?.prompts;
                     if (prompts?.length) {
                       setSettings((old) => ({
                         ...old,
@@ -1405,98 +1417,98 @@ export function Studio() {
                       </p>
                     ) : null}
                     {privatePrompts.map((prompt, index) => (
-                    <div
-                      className="flex items-start gap-3 rounded-md border bg-background p-3"
-                      key={`${index}-${prompt.name}`}
-                    >
-                      <Checkbox
-                        aria-label={`Chọn prompt ${prompt.name}`}
-                        disabled={
-                          selectedPrivatePromptIndexes.length >= MAX_PROMPTS_PER_SUMMARY &&
-                          !selectedPrivatePromptIndexes.includes(index)
-                        }
-                        checked={selectedPrivatePromptIndexes.includes(index)}
-                        onCheckedChange={(checked) =>
-                          setSelectedPrivatePromptIndexes((old) =>
-                            checked
-                              ? old.includes(index)
-                                ? old
-                                : [...old, index]
-                              : old.filter((selectedIndex) => selectedIndex !== index),
-                          )
-                        }
-                      />
-                      {editingPrivatePromptIndex === index && privatePromptEditDraft ? (
-                        <div className="min-w-0 flex-1 space-y-2">
-                          <Input
-                            aria-label={`Sửa tên prompt ${index + 1}`}
-                            value={privatePromptEditDraft.name}
-                            onChange={(event) =>
-                              setPrivatePromptEditDraft((old) =>
-                                old ? { ...old, name: event.target.value } : old,
-                              )
-                            }
-                          />
-                          <Textarea
-                            aria-label={`Sửa nội dung prompt ${index + 1}`}
-                            className="min-h-40"
-                            maxLength={10_000}
-                            value={privatePromptEditDraft.text}
-                            onChange={(event) =>
-                              setPrivatePromptEditDraft((old) =>
-                                old ? { ...old, text: event.target.value } : old,
-                              )
-                            }
-                          />
-                          <div className="flex flex-wrap gap-2">
+                      <div
+                        className="flex items-start gap-3 rounded-md border bg-background p-3"
+                        key={`${index}-${prompt.name}`}
+                      >
+                        <Checkbox
+                          aria-label={`Chọn prompt ${prompt.name}`}
+                          disabled={
+                            selectedPrivatePromptIndexes.length >= MAX_PROMPTS_PER_SUMMARY &&
+                            !selectedPrivatePromptIndexes.includes(index)
+                          }
+                          checked={selectedPrivatePromptIndexes.includes(index)}
+                          onCheckedChange={(checked) =>
+                            setSelectedPrivatePromptIndexes((old) =>
+                              checked
+                                ? old.includes(index)
+                                  ? old
+                                  : [...old, index]
+                                : old.filter((selectedIndex) => selectedIndex !== index),
+                            )
+                          }
+                        />
+                        {editingPrivatePromptIndex === index && privatePromptEditDraft ? (
+                          <div className="min-w-0 flex-1 space-y-2">
+                            <Input
+                              aria-label={`Sửa tên prompt ${index + 1}`}
+                              value={privatePromptEditDraft.name}
+                              onChange={(event) =>
+                                setPrivatePromptEditDraft((old) =>
+                                  old ? { ...old, name: event.target.value } : old,
+                                )
+                              }
+                            />
+                            <Textarea
+                              aria-label={`Sửa nội dung prompt ${index + 1}`}
+                              className="min-h-40"
+                              maxLength={10_000}
+                              value={privatePromptEditDraft.text}
+                              onChange={(event) =>
+                                setPrivatePromptEditDraft((old) =>
+                                  old ? { ...old, text: event.target.value } : old,
+                                )
+                              }
+                            />
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                disabled={savingPrivatePromptEdit}
+                                onClick={() => void savePrivatePromptEdit()}
+                              >
+                                <Save size={13} />
+                                {savingPrivatePromptEdit ? "Đang lưu…" : "Lưu prompt"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={savingPrivatePromptEdit}
+                                onClick={() => {
+                                  setEditingPrivatePromptIndex(null);
+                                  setPrivatePromptEditDraft(null);
+                                }}
+                              >
+                                Hủy
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium">
+                                {prompt.name || `Prompt ${index + 1}`}
+                              </p>
+                              <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-muted-foreground">
+                                {prompt.text}
+                              </p>
+                            </div>
                             <Button
-                              size="sm"
-                              variant="secondary"
-                              disabled={savingPrivatePromptEdit}
-                              onClick={() => void savePrivatePromptEdit()}
-                            >
-                              <Save size={13} />
-                              {savingPrivatePromptEdit ? "Đang lưu…" : "Lưu prompt"}
-                            </Button>
-                            <Button
-                              size="sm"
                               variant="ghost"
-                              disabled={savingPrivatePromptEdit}
+                              size="icon"
+                              className="size-8 shrink-0"
+                              aria-label={`Sửa prompt ${prompt.name}`}
+                              title="Sửa prompt"
                               onClick={() => {
-                                setEditingPrivatePromptIndex(null);
-                                setPrivatePromptEditDraft(null);
+                                setEditingPrivatePromptIndex(index);
+                                setPrivatePromptEditDraft({ ...prompt });
                               }}
                             >
-                              Hủy
+                              <Pencil size={14} />
                             </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium">
-                              {prompt.name || `Prompt ${index + 1}`}
-                            </p>
-                            <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-muted-foreground">
-                              {prompt.text}
-                            </p>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8 shrink-0"
-                            aria-label={`Sửa prompt ${prompt.name}`}
-                            title="Sửa prompt"
-                            onClick={() => {
-                              setEditingPrivatePromptIndex(index);
-                              setPrivatePromptEditDraft({ ...prompt });
-                            }}
-                          >
-                            <Pencil size={14} />
-                          </Button>
-                        </>
-                      )}
-                    </div>
+                          </>
+                        )}
+                      </div>
                     ))}
                   </div>
                   <DialogFooter className="mt-4 justify-between">
@@ -1530,7 +1542,7 @@ export function Studio() {
                     </div>
                     <div className="flex justify-end gap-2">
                       <DialogClose asChild>
-                        <Button size="sm" variant="outline">
+                        <Button size="sm" variant="secondary">
                           Đóng
                         </Button>
                       </DialogClose>
@@ -1943,7 +1955,11 @@ export function Studio() {
                                   className="truncate"
                                   title={`${providers[result.provider || ""]?.label || result.provider || "Model"} · ${result.model || "Không rõ model"}`}
                                 >
-                                  Mô hình: {providers[result.provider || ""]?.label || result.provider || "Không rõ"} · {result.model || "Không rõ"}
+                                  Mô hình:{" "}
+                                  {providers[result.provider || ""]?.label ||
+                                    result.provider ||
+                                    "Không rõ"}{" "}
+                                  · {result.model || "Không rõ"}
                                 </p>
                                 {result.summary && (
                                   <p className="mt-1">
@@ -1955,8 +1971,7 @@ export function Studio() {
                                 size="sm"
                                 variant="secondary"
                                 disabled={
-                                  busy ||
-                                  ["queued", "running", "cancelling"].includes(job.status)
+                                  busy || ["queued", "running", "cancelling"].includes(job.status)
                                 }
                                 onClick={() => void retryResult(result)}
                               >
@@ -2051,8 +2066,8 @@ export function Studio() {
                             <strong>{item.title}</strong>
                             <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
                               <small className="min-w-0">
-                                {prettyDate(item.created)} · {item.documents} tài liệu · {item.done}/
-                                {item.total}
+                                {prettyDate(item.created)} · {item.documents} tài liệu · {item.done}
+                                /{item.total}
                               </small>
                               <Badge className="shrink-0">
                                 {statuses[item.status] || item.status}

@@ -1,13 +1,17 @@
 """Durable queue consumer. Deploy exactly one worker; API processes never execute jobs."""
 
+import logging
 import os
 import threading
 
+from summora.artifacts import delete_result, upload_result
 from summora.config import read_provider_configs
 from summora.paths import DATA_DIR, ENV_PATH
 from summora.providers import make_client
 from summora.storage import Store
 from summora.tasks import run_tasks
+
+logger = logging.getLogger(__name__)
 
 
 def process(store, state, client_factory=make_client, env_path=ENV_PATH, stop=None):
@@ -26,7 +30,7 @@ def process(store, state, client_factory=make_client, env_path=ENV_PATH, stop=No
         state["done"] += 1
         state["success" if entry["status"] == "success" else "errors"] += 1
         state["results"].append({"title": documents[task["row"] - 1]["title"], **entry})
-        state["download_ready"] = True
+        state["download_ready"] = False
         store.update(state)
 
     try:
@@ -58,7 +62,14 @@ def process(store, state, client_factory=make_client, env_path=ENV_PATH, stop=No
                 client.close()
             except Exception:
                 pass
-        state["download_ready"] = path.is_file()
+        state["download_ready"] = False
+        if path.is_file():
+            try:
+                upload_result(state["id"], path)
+                state["download_ready"] = True
+            except Exception:
+                logger.exception("Unable to upload result artifact for job %s", state["id"])
+                state["message"] = "Lượt chạy xong nhưng chưa lưu được file tải xuống."
         for task in tasks:
             if task["status"] in {"waiting", "running"}:
                 task["status"] = "cancelled" if state["status"] == "cancelled" else "error"
@@ -84,7 +95,16 @@ def loop(store, stop, client_factory=make_client, env_path=ENV_PATH):
         last_prune = 0
         while not stop.is_set():
             if time.time() - last_prune > 3600:
-                store.prune(max(1, int(os.environ.get("STUDIO_RETENTION_DAYS", "30"))))
+                for job_id in store.prune(
+                    max(1, int(os.environ.get("STUDIO_RETENTION_DAYS", "30")))
+                ):
+                    try:
+                        delete_result(job_id)
+                    except Exception:
+                        logger.exception(
+                            "Unable to delete expired result artifact for job %s", job_id
+                        )
+                        pass
                 last_prune = time.time()
             state = store.claim()
             if state:

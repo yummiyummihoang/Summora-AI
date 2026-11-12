@@ -1,10 +1,10 @@
 import type { NextConfig } from "next";
 
-const api = process.env.FASTAPI_INTERNAL_URL ?? "http://localhost:8000";
+const api = process.env.FASTAPI_INTERNAL_URL;
 
 const nextConfig: NextConfig = {
   async rewrites() {
-    return [{ source: "/api/:path*", destination: `${api}/api/:path*` }];
+    return api ? [{ source: "/api/:path*", destination: `${api}/api/:path*` }] : [];
   },
 };
 

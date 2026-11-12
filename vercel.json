@@ -1,0 +1,29 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "frontend": {
+      "root": "apps/web",
+      "framework": "nextjs",
+      "installCommand": "cd ../.. && corepack pnpm install --frozen-lockfile",
+      "buildCommand": "cd ../.. && corepack pnpm db:generate && corepack pnpm --filter @summora/web build"
+    },
+    "api": {
+      "root": ".",
+      "runtime": "container",
+      "entrypoint": "Dockerfile.vercel"
+    }
+  },
+  "daemons": {
+    "worker": {
+      "root": ".",
+      "entrypoint": "Dockerfile.vercel",
+      "command": ["python", "-m", "summora.worker"],
+      "instances": { "iad1": 1 }
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": { "service": "api" } },
+    { "source": "/health", "destination": { "service": "api" } },
+    { "source": "/(.*)", "destination": { "service": "frontend" } }
+  ]
+}

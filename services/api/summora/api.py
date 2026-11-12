@@ -20,7 +20,9 @@ from summora.storage import Store, encode
 from summora.tasks import normalize_payload
 from summora.worker import loop
 
-MAX_BODY = 25 * 1024 * 1024
+# Vercel rejects function requests above 4.5 MB before they reach FastAPI.
+MAX_BODY = 4 * 1024 * 1024
+MAX_UPLOAD = 3 * 1024 * 1024
 MAX_PROMPTS_PER_DOCUMENT = 50
 
 
@@ -74,14 +76,14 @@ def create_app(
     async def security_headers(request, call_next):
         try:
             if int(request.headers.get("content-length", "0")) > MAX_BODY:
-                return JSONResponse({"error": "Yêu cầu tối đa 25 MB."}, 413)
+                return JSONResponse({"error": "Yêu cầu tối đa 4 MB."}, 413)
         except ValueError:
             return JSONResponse({"error": "Dung lượng không hợp lệ."}, 400)
         chunks, total = [], 0
         async for chunk in request.stream():
             total += len(chunk)
             if total > MAX_BODY:
-                return JSONResponse({"error": "Yêu cầu tối đa 25 MB."}, 413)
+                return JSONResponse({"error": "Yêu cầu tối đa 4 MB."}, 413)
             chunks.append(chunk)
         request._body = b"".join(chunks)
         response = await call_next(request)
@@ -227,7 +229,7 @@ def create_app(
             file = form.get("file")
             if not file or not hasattr(file, "read"):
                 raise ValueError("Chưa chọn file.")
-            content = await file.read(MAX_BODY)
+            content = await file.read(MAX_UPLOAD + 1)
             parsed = await run_in_threadpool(
                 import_document,
                 content,
@@ -267,7 +269,10 @@ def create_app(
 
     @app.get("/api/jobs/{job_id}")
     def job(job_id: str, request: Request):
-        return store.job(user(request)["id"], job_id)
+        state = store.job(user(request)["id"], job_id)
+        for task in state["tasks"]:
+            task.pop("rendered_prompt", None)
+        return state
 
     @app.post("/api/jobs/{job_id}/cancel")
     def cancel(job_id: str, request: Request):
@@ -276,12 +281,22 @@ def create_app(
 
     @app.post("/api/jobs/{job_id}/delete")
     def delete(job_id: str, request: Request):
-        store.delete(user(request)["id"], job_id)
+        owner = user(request)["id"]
+        store.job(owner, job_id)
+        from summora.artifacts import delete_result
+
+        delete_result(job_id)
+        store.delete(owner, job_id)
         return {"ok": True}
 
     @app.get("/api/jobs/{job_id}/download")
     def download(job_id: str, request: Request):
         state = store.job(user(request)["id"], job_id)
+        from summora.artifacts import create_download_url
+
+        url = create_download_url(state["id"])
+        if url:
+            return {"url": url}
         path = store.directory / (state["id"] + ".json")
         if not path.is_file():
             raise HTTPException(404, "Chưa có file kết quả.")

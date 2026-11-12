@@ -276,7 +276,17 @@ def run_tasks(documents, tasks, clients, output_path, progress, should_stop, sta
                     "error": "Bỏ qua do lỗi xác thực hoặc model của cấu hình này.",
                 }
             else:
-                entry = execute_task(task, clients[task["provider"]])
+                document = documents[task["row"] - 1]
+                task["rendered_prompt"] = render_template(
+                    task["prompt_text"],
+                    document["text"],
+                    task["budget"],
+                    document.get("settings", {}).get("parameters", {}),
+                )
+                try:
+                    entry = execute_task(task, clients[task["provider"]])
+                finally:
+                    task.pop("rendered_prompt", None)
                 error = entry.get("error", {})
                 code = error.get("http_status") if isinstance(error, dict) else None
                 if code in {401, 403}:
